@@ -704,6 +704,10 @@ dialog .ft{padding:12px 16px;border-top:1px solid var(--rule);display:flex;gap:9
       </div>
       <div class="rowactions" style="margin-left:auto">
         <button class="btn sm ghost" id="btnExpand">Buka semua</button>
+        <span class="hint" id="lraInfo"></span>
+        <button class="btn sm ghost" id="btnLraStruk">Struktur LRA…</button>
+        <button class="btn sm ghost" id="btnPagu">Muat pagu…</button>
+        <button class="btn sm" id="btnLra" title="Realisasi Operasi dan Modal, diisi ke struktur berkas LRA">Unduh LRA (Operasi–Modal)</button>
         <button class="btn sm" id="btnXlsx">Unduh Excel</button>
         <button class="btn sm" id="btnPdf">Unduh PDF</button>
       </div>
@@ -740,6 +744,8 @@ dialog .ft{padding:12px 16px;border-top:1px solid var(--rule);display:flex;gap:9
 </dialog>
 
 <input type="file" id="restoreFile" accept=".json" hidden>
+<input type="file" id="lraFile" accept=".xlsx,.xls" hidden>
+<input type="file" id="paguFile" accept=".xlsx,.xls" hidden>
 
 <script>
 "use strict";
@@ -830,7 +836,7 @@ const Store = (()=>{
             kodeRekIdx, namaRekIdx, tgl, nilai, bidangKodeIdx, ket, batchId]
    ============================================================ */
 const F = {DOC:0,JD:1,TX:2,KSUB:3,NSUB:4,KREK:5,NREK:6,TGL:7,NILAI:8,BID:9,KET:10,BATCH:11,CARA:12,PER:13};
-let DB = { strings:[], rows:[], batches:[], bidangNama:{}, aturanSub:{}, aliasBidang:{} };
+let DB = { strings:[], rows:[], batches:[], bidangNama:{}, aturanSub:{}, aliasBidang:{}, lra:null, pagu:null };
 let SMAP = new Map();
 
 function rebuildSmap(){ SMAP=new Map(); DB.strings.forEach((s,i)=>SMAP.set(s,i)); }
@@ -1519,7 +1525,7 @@ function gambarMast(){
   add("penyimpanan", Store.mode);
 }
 
-function render(){ gambarMast(); gambarBatch(); isiSaringan(); gambarRekap(); }
+function render(){ gambarMast(); gambarBatch(); isiSaringan(); gambarRekap(); gambarLraInfo(); }
 
 /* ============================================================
    UNDUHAN
@@ -1708,7 +1714,7 @@ async function pulihkan(file){
     const j=JSON.parse(await file.text());
     if(!j || !Array.isArray(j.rows) || !Array.isArray(j.strings)) throw new Error("Isi berkas tidak dikenali.");
     if(!confirm("Seluruh data saat ini akan diganti dengan isi cadangan. Lanjutkan?")) return;
-    DB={strings:j.strings,rows:j.rows,batches:j.batches||[],bidangNama:j.bidangNama||{},aturanSub:j.aturanSub||{},aliasBidang:j.aliasBidang||{}};
+    DB={strings:j.strings,rows:j.rows,batches:j.batches||[],bidangNama:j.bidangNama||{},aturanSub:j.aturanSub||{},aliasBidang:j.aliasBidang||{},lra:j.lra||DB.lra||null,pagu:j.pagu||DB.pagu||null};
     rebuildSmap(); await Store.save(DB); render(); toast("Data dipulihkan dari cadangan.");
   }catch(e){ toast("Gagal memulihkan: "+e.message,true); }
 }
@@ -1760,6 +1766,212 @@ async function simpanNamaBidang(){
 }
 
 /* ============================================================
+   LRA OPERASI–MODAL
+   Struktur (Urusan > Organisasi > Program > Kegiatan > Sub Kegiatan > Rekening)
+   dibaca dari berkas LRA. ANGKA di berkas itu diabaikan. Realisasi diisi dari
+   data impor yang sedang tersaring. Tak Terduga (5.3) dan Transfer (5.4) dibuang.
+   ============================================================ */
+const kd = v => String(v??"").replace(/\s+/g," ").trim();
+const segs = k => k ? k.split(".").length : 0;
+const jenisRek = rek => { const p=rek.split(".").slice(0,2).join("."); return p==="5.1"?"op" : p==="5.2"?"mod" : null; };
+
+function bacaStrukturLra(buf,namaFile){
+  const wb=XLSX.read(buf,{type:"array"});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  if(!ws) throw new Error("Sheet pertama kosong.");
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  let kode=-1, nomor=-1;
+  for(let i=0;i<Math.min(30,aoa.length);i++){
+    const r=aoa[i]||[];
+    if(kode<0 && kd(r[0]).toLowerCase()==="kode") kode=i;
+    if(kd(r[0])==="1" && kd(r[4])==="2"){ nomor=i; break; }
+  }
+  if(kode<0||nomor<0) throw new Error("Judul kolom (Kode ... Uraian) atau baris penomoran (1, 2, 3 …) tidak ditemukan.");
+  const judul=[]; for(let i=0;i<kode;i++){ const t=kd((aoa[i]||[])[0]); if(t) judul.push(t); }
+  const rows=[];
+  for(let i=nomor+1;i<aoa.length;i++){
+    const r=aoa[i]||[];
+    if(kd(r[4]).toLowerCase()==="jumlah") break;
+    const x=[0,1,2,3,4].map(c=>kd(r[c]));
+    if(x.some(Boolean)) rows.push(x);
+  }
+  if(!rows.length) throw new Error("Tidak ada baris struktur di bawah baris penomoran.");
+  return {nama:namaFile, judul, hdrUraian:kd(aoa[kode][4])||"Uraian", rows};
+}
+
+/* ---------- pagu: dibaca dari kolom Total ---------- */
+const UNIT_KE_BIDANG = {UMPEG:"205.1", KEUANGAN:"205.1", SUNGRAM:"205.1"};   // unit di berkas pagu → kode bidang
+function kodeBidangUnit(unit){
+  const u=kd(unit).toUpperCase();
+  if(UNIT_KE_BIDANG[u]) return UNIT_KE_BIDANG[u];
+  const kodes=new Set([...Object.keys(BIDANG_BAWAAN),...Object.keys(DB.bidangNama||{})]);
+  for(const k of kodes) if(kd(namaBidang(k)).toUpperCase()===u) return k;
+  return null;
+}
+function bacaPagu(buf,namaFile){
+  const wb=XLSX.read(buf,{type:"array"});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  if(!ws) throw new Error("Sheet pertama kosong.");
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  const h=(aoa[0]||[]).map(x=>kd(x).toLowerCase());
+  const iUnit=h.indexOf("unit kerja"), iProg=h.indexOf("program"), iSub=h.indexOf("sub kegiatan"), iRek=h.indexOf("sub rincian objek");
+  if([iUnit,iProg,iSub,iRek].some(i=>i<0)) throw new Error("Judul kolom Unit Kerja, Program, Sub Kegiatan, atau Sub Rincian Objek tidak ditemukan di baris pertama.");
+  const num=v=> typeof v==="number" ? v : (typeof v==="string" && /^-?\d+(\.\d+)?$/.test(v.trim()) ? parseFloat(v) : null);
+  // Bila ada dua kolom "Total" (dua set Koefisien/Harga/Total), dipakai yang paling kanan yang berisi angka.
+  const kolTotal=h.map((x,i)=>x==="total"?i:-1).filter(i=>i>=0);
+  let iTot=-1;
+  kolTotal.forEach(i=>{ if(aoa.slice(1).some(r=>num((r||[])[i])!==null)) iTot=i; });
+  if(iTot<0) throw new Error("Tidak ada kolom Total yang berisi angka.");
+  const kodeAwal=x=>{ const m=kd(x).match(/^(\S+)/); return m?m[1]:""; };
+  const agg=new Map(), ganda={}, unit={}; let n=0, tanpa=0, dup=0, total=0, x=0;
+  for(let i=1;i<aoa.length;i++){
+    const r=aoa[i]||[]; if(!kd(r[iUnit]) && !kd(r[iSub])) continue;
+    n++;
+    const kunci=r.slice(0,8).map(kd).join("|")+"|"+r[iTot];
+    if(ganda[kunci]) dup++; else ganda[kunci]=1;
+    const pg=kodeAwal(r[iProg]); let sub=kodeAwal(r[iSub]); const rek=kodeAwal(r[iRek]);
+    if(/^X\.XX/i.test(sub) && pg){ const pp=pg.split("."); sub=pp[0]+"."+pp[1]+sub.slice(4); x++; }
+    const v=num(r[iTot]); if(v===null){ tanpa++; continue; }
+    const u=kd(r[iUnit]); unit[u]=1;
+    const key=u+"\u0001"+sub+"\u0001"+rek;
+    agg.set(key,(agg.get(key)||0)+v); total+=v;
+  }
+  const rows=[...agg].map(([k,v])=>{ const q=k.split("\u0001"); return [q[0],q[1],q[2],v]; });
+  return {nama:namaFile, n, tanpa, dup, total, perbaikiX:x, kolom:kd(aoa[0][iTot])+" (kolom "+XLSX.utils.encode_col(iTot)+")", rows, unit:Object.keys(unit)};
+}
+function paguTersaring(){
+  if(!DB.pagu) return [];
+  return DB.pagu.rows.filter(([u])=>{
+    if(!BID_PILIH.size) return true;
+    const k=kodeBidangUnit(u); return k && BID_PILIH.has(k);
+  }).map(([u,sub,rek,v])=>[sub,rek,v]);
+}
+// Realisasi LRA bersifat kumulatif: semua bulan sampai dengan periode yang dipilih.
+function dataLra(){
+  const p=$("#fPeriode").value, t=$("#fTx").value, q=($("#fCari").value||"").toLowerCase().trim();
+  return DB.rows.filter(r=>{
+    if(p){ const pr=S(r[F.PER]); if(!pr || pr>p) return false; }
+    if(BID_PILIH.size && !BID_PILIH.has(S(r[F.BID]))) return false;
+    if(t && S(r[F.TX])!==t) return false;
+    if(q){
+      const hay=(S(r[F.NSUB])+" "+S(r[F.NREK])+" "+r[F.DOC]+" "+S(r[F.KSUB])+" "+S(r[F.KREK])+" "+r[F.KET]).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function susunLra(data,pagu){
+  const L=DB.lra.rows, per={}, abaikan={n:0,nilai:0};
+  const ambil=sub=>per[sub]||(per[sub]={op:0,mod:0,pop:0,pmod:0,rek:[],prek:[]});
+  data.forEach(r=>{
+    const sub=kd(S(r[F.KSUB])), rek=kd(S(r[F.KREK])), v=r[F.NILAI]||0, j=jenisRek(rek);
+    if(!j){ abaikan.n++; abaikan.nilai+=v; return; }          // Tak Terduga, Transfer, lainnya
+    const P=ambil(sub); P[j]+=v; P.rek.push({rek,j,v,pakai:false});
+  });
+  pagu.forEach(([sub,rek,v])=>{
+    const j=jenisRek(rek);
+    if(!j){ abaikan.n++; abaikan.nilai+=v; return; }
+    const P=ambil(sub); P[j==="op"?"pop":"pmod"]+=v; P.prek.push({rek,j,v,pakai:false});
+  });
+  const dp=L.map(([a,b,c,d])=> d? 10+segs(d) : c? segs(c) : b? 2.5 : segs(a));
+  const isSub=i=>!L[i][3] && segs(L[i][2])>=6;
+  const ada=new Set(); L.forEach((x,i)=>{ if(isSub(i)) ada.add(x[2]); });
+  const nilai=L.map(()=>[null,null,null,null]);     // [pagu Operasi, realisasi Operasi, pagu Modal, realisasi Modal]
+  const taruh=(i,a)=>{ a.forEach((v,k)=>{ if(v) nilai[i][k]=v; }); };
+  L.forEach(([a,b,c,d],i)=>{
+    if(d){
+      const P=per[c]; if(!P) return;
+      const j=jenisRek(d); if(!j) return;
+      let rv=0, pv=0;
+      P.rek.forEach(e=>{ if(e.j===j && (e.rek===d||e.rek.startsWith(d+"."))){ rv+=e.v; e.pakai=true; } });
+      P.prek.forEach(e=>{ if(e.j===j && (e.rek===d||e.rek.startsWith(d+"."))){ pv+=e.v; e.pakai=true; } });
+      taruh(i, j==="op" ? [pv,rv,0,0] : [0,0,pv,rv]);
+    }else{
+      const t=[0,0,0,0];
+      for(let k=i;k<L.length && (k===i||dp[k]>dp[i]);k++){
+        if(isSub(k) && per[L[k][2]]){ const P=per[L[k][2]]; t[0]+=P.pop; t[1]+=P.op; t[2]+=P.pmod; t[3]+=P.mod; }
+      }
+      taruh(i,t);
+    }
+  });
+  const jml=[0,0,0,0], tidak=[];
+  Object.keys(per).forEach(sub=>{
+    const P=per[sub];
+    if(ada.has(sub)){
+      jml[0]+=P.pop; jml[1]+=P.op; jml[2]+=P.pmod; jml[3]+=P.mod;
+      P.rek.filter(e=>!e.pakai).forEach(e=>tidak.push(["Rekening tidak ada di struktur","Realisasi",sub,e.rek,e.v]));
+      P.prek.filter(e=>!e.pakai).forEach(e=>tidak.push(["Rekening tidak ada di struktur","Pagu",sub,e.rek,e.v]));
+    }else{
+      if(P.op+P.mod) tidak.push(["Sub kegiatan tidak ada di struktur","Realisasi",sub,"",P.op+P.mod]);
+      if(P.pop+P.pmod) tidak.push(["Sub kegiatan tidak ada di struktur","Pagu",sub,"",P.pop+P.pmod]);
+    }
+  });
+  return {nilai,jml,tidak,abaikan};
+}
+
+function gambarLraInfo(){
+  const n=$("#lraInfo"); if(!n) return;
+  const bag=[DB.lra ? "Struktur: "+DB.lra.nama : "Struktur LRA belum dimuat",
+             DB.pagu ? "Pagu: "+DB.pagu.nama : "pagu belum dimuat"];
+  n.textContent=bag.join(" · ");
+}
+
+function unduhLra(){
+  if(!DB.lra){ toast("Muat dulu berkas struktur LRA.",true); $("#lraFile").click(); return; }
+  const data=dataLra(), pagu=paguTersaring();
+  if(!data.length && !pagu.length){ toast("Tidak ada data untuk diunduh.",true); return; }
+  const L=DB.lra, H=susunLra(data,pagu), a=[];
+  L.judul.forEach(t=>a.push([t]));
+  const p=$("#fPeriode").value;
+  a.push([(p? "Realisasi s.d. "+labelPeriode(p) : "Realisasi seluruh periode")+" · "+
+          (BID_PILIH.size? [...BID_PILIH].sort().map(k=>namaBidang(k)).join(" + ") : "Semua bidang")+
+          (DB.pagu? " · Pagu: kolom "+DB.pagu.kolom : " · Pagu belum dimuat")]);
+  const h0=a.length;
+  a.push(["Kode",null,null,null,L.hdrUraian,"Kelompok Belanja"]);
+  a.push([null,null,null,null,null,"Operasi",null,"Modal"]);
+  a.push([null,null,null,null,null,"Anggaran","Realisasi","Anggaran","Realisasi"]);
+  a.push(["1",null,null,null,"2","3","4","5","6"]);
+  L.rows.forEach((r,i)=>a.push([r[0]||null,r[1]||null,r[2]||null,r[3]||null,r[4]||null,
+    H.nilai[i][0],H.nilai[i][1],H.nilai[i][2],H.nilai[i][3]]));
+  const jx=a.length+1;
+  a.push([null,null,null,null,"Jumlah",H.jml[0],H.jml[1],H.jml[2],H.jml[3]]);
+  a.push([]); a.push([]);
+  const px=a.length+1, rx=px+1;
+  a.push([null,null,null,null,"PAGU"]);
+  a.push([null,null,null,null,"Realisasi"]);
+  const ws=XLSX.utils.aoa_to_sheet(a);
+  ws["F"+px]={t:"n",v:H.jml[0]+H.jml[2],f:"F"+jx+"+H"+jx};
+  ws["F"+rx]={t:"n",v:H.jml[1]+H.jml[3],f:"G"+jx+"+I"+jx};
+  const pg=H.jml[0]+H.jml[2], rl=H.jml[1]+H.jml[3];
+  ws["G"+rx]={t:"n",v:pg?rl/pg:0,f:"IFERROR(F"+rx+"/F"+px+",0)",z:"0.00%"};
+  Object.keys(ws).forEach(k=>{ if(k[0]!=="!" && ws[k].t==="n" && !ws[k].z && /^[F-I]/.test(k)) ws[k].z="#,##0.00"; });
+  const m=[]; L.judul.forEach((t,i)=>m.push({s:{r:i,c:0},e:{r:i,c:8}}));
+  m.push({s:{r:L.judul.length,c:0},e:{r:L.judul.length,c:8}});
+  m.push({s:{r:h0,c:0},e:{r:h0+2,c:3}},{s:{r:h0,c:4},e:{r:h0+2,c:4}},{s:{r:h0,c:5},e:{r:h0,c:8}},
+         {s:{r:h0+1,c:5},e:{r:h0+1,c:6}},{s:{r:h0+1,c:7},e:{r:h0+1,c:8}},{s:{r:h0+3,c:0},e:{r:h0+3,c:3}});
+  ws["!merges"]=m;
+  ws["!cols"]=[{wch:6},{wch:22},{wch:20},{wch:22},{wch:62},{wch:18},{wch:18},{wch:18},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"LRA Operasi-Modal");
+  if(H.tidak.length){
+    const w2=XLSX.utils.aoa_to_sheet([["Catatan","Sumber","Kode sub kegiatan","Kode rekening","Nilai"],...H.tidak]);
+    w2["!cols"]=[{wch:36},{wch:11},{wch:22},{wch:22},{wch:18}];
+    XLSX.utils.book_append_sheet(wb,w2,"Tidak Cocok");
+  }
+  XLSX.writeFile(wb,namaBerkas("xlsx").replace("Rekap-Realisasi","LRA-Operasi-Modal"));
+  let pesan="LRA diunduh.";
+  if(!DB.pagu) pesan+=" Pagu belum dimuat, kolom Anggaran kosong.";
+  if(H.tidak.length) pesan+=" "+H.tidak.length+" baris tidak cocok dengan struktur (lihat sheet Tidak Cocok).";
+  if(H.abaikan.n) pesan+=" "+H.abaikan.n+" baris bukan Operasi/Modal diabaikan.";
+  if(DB.pagu && BID_PILIH.size){
+    const tak=DB.pagu.unit.filter(u=>!kodeBidangUnit(u));
+    if(tak.length) pesan+=" Unit tanpa bidang (tidak ikut saringan): "+tak.join(", ")+".";
+  }
+  toast(pesan, H.tidak.length>0);
+}
+
+/* ============================================================
    PEMASANGAN
    ============================================================ */
 function pilihTab(id){
@@ -1804,6 +2016,31 @@ $("#btnExpand").onclick=()=>{
 
 $("#btnXlsx").onclick=unduhXlsx;
 $("#btnPdf").onclick=unduhPdf;
+$("#btnLraStruk").onclick=()=>$("#lraFile").click();
+$("#btnLra").onclick=unduhLra;
+$("#btnPagu").onclick=()=>$("#paguFile").click();
+$("#paguFile").onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    const P=bacaPagu(await f.arrayBuffer(),f.name);
+    DB.pagu=P; await Store.save(DB); gambarLraInfo();
+    const tak=P.unit.filter(u=>!kodeBidangUnit(u));
+    let pesan="Pagu dimuat dari "+P.kolom+": "+P.rows.length+" kombinasi unit/sub kegiatan/rekening, total "+Math.round(P.total).toLocaleString("id-ID")+".";
+    if(P.tanpa) pesan+=" "+P.tanpa+" dari "+P.n+" baris tidak punya Total.";
+    if(P.perbaikiX) pesan+=" "+P.perbaikiX+" kode X.XX diperbaiki dari kolom Program.";
+    if(P.dup) pesan+=" "+P.dup+" baris identik terdeteksi (tetap dihitung).";
+    if(tak.length) pesan+=" Unit belum terpetakan ke bidang: "+tak.join(", ")+".";
+    toast(pesan, P.tanpa>0||tak.length>0);
+  }catch(err){ toast("Gagal membaca pagu: "+err.message,true); }
+};
+$("#lraFile").onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{
+    DB.lra=bacaStrukturLra(await f.arrayBuffer(),f.name);
+    await Store.save(DB); gambarLraInfo();
+    toast("Struktur LRA dimuat: "+DB.lra.rows.length+" baris.");
+  }catch(err){ toast("Gagal membaca struktur: "+err.message,true); }
+};
 $("#btnBackup").onclick=cadangkan;
 $("#btnRestore").onclick=()=>$("#restoreFile").click();
 $("#restoreFile").onchange=e=>{ if(e.target.files[0]) pulihkan(e.target.files[0]); e.target.value=""; };
@@ -1816,7 +2053,7 @@ $("#bidangSave").onclick=simpanNamaBidang;
 $("#btnWipe").onclick=async()=>{
   if(!confirm("Hapus SELURUH data di database ini? Tindakan ini tidak bisa dibatalkan.")) return;
   if(!confirm("Sudah dicadangkan? Tekan OK untuk benar-benar menghapus.")) return;
-  DB={strings:[],rows:[],batches:[],bidangNama:{},aturanSub:{},aliasBidang:{}}; rebuildSmap();
+  DB={strings:[],rows:[],batches:[],bidangNama:{},aturanSub:{},aliasBidang:{},lra:DB.lra||null,pagu:DB.pagu||null}; rebuildSmap();
   await Store.clear(); await Store.save(DB); render(); toast("Database dikosongkan.");
 };
 
@@ -1824,7 +2061,7 @@ $("#btnWipe").onclick=async()=>{
   await Store.init();
   const muat=await Store.load();
   if(muat && Array.isArray(muat.rows)){
-    DB={strings:muat.strings||[],rows:muat.rows,batches:muat.batches||[],bidangNama:muat.bidangNama||{},aturanSub:muat.aturanSub||{},aliasBidang:muat.aliasBidang||{}};
+    DB={strings:muat.strings||[],rows:muat.rows,batches:muat.batches||[],bidangNama:muat.bidangNama||{},aturanSub:muat.aturanSub||{},aliasBidang:muat.aliasBidang||{},lra:muat.lra||null,pagu:muat.pagu||null};
   }
   rebuildSmap();
   // Migrasi: baris yang tersimpan sebelum penanggalan per baris (kolom AM) dipakai
