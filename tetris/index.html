@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetris Sederhana</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  body { background: #1b2430; color: #e8edf2; min-height: 100vh; }
+  #game { background: #0f151d; border: 4px solid #3b4a5e; border-radius: 6px; max-width: 100%; height: auto; }
+  #next { background: #0f151d; border: 2px solid #3b4a5e; border-radius: 6px; }
+  .panel { background: #263241; border-radius: 8px; }
+  .stat { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="container py-4">
+  <h1 class="h3 text-center mb-4">Tetris</h1>
+  <div class="row justify-content-center g-4">
+    <div class="col-auto">
+      <canvas id="game" width="300" height="600"></canvas>
+    </div>
+    <div class="col-12 col-md-4 col-lg-3">
+      <div class="panel p-3 mb-3">
+        <div class="mb-1 text-secondary">Skor</div>
+        <div id="score" class="h3 stat">0</div>
+        <div class="d-flex justify-content-between mt-3">
+          <div><div class="text-secondary">Baris</div><div id="lines" class="h5 stat">0</div></div>
+          <div><div class="text-secondary">Level</div><div id="level" class="h5 stat">1</div></div>
+        </div>
+      </div>
+      <div class="panel p-3 mb-3 text-center">
+        <div class="mb-2 text-secondary">Berikutnya</div>
+        <canvas id="next" width="120" height="120"></canvas>
+      </div>
+      <div class="d-grid gap-2 mb-3">
+        <button id="startBtn" class="btn btn-success">Mulai</button>
+        <button id="pauseBtn" class="btn btn-outline-light" disabled>Jeda</button>
+      </div>
+      <div class="panel p-3 small">
+        <div class="fw-semibold mb-2">Kontrol</div>
+        <div>← → : geser</div>
+        <div>↑ : putar</div>
+        <div>↓ : turun pelan</div>
+        <div>Spasi : jatuh langsung</div>
+        <div>P : jeda</div>
+      </div>
+      <div class="d-flex d-md-none gap-2 mt-3 justify-content-center">
+        <button class="btn btn-secondary" data-act="left">←</button>
+        <button class="btn btn-secondary" data-act="rotate">⟳</button>
+        <button class="btn btn-secondary" data-act="down">↓</button>
+        <button class="btn btn-secondary" data-act="right">→</button>
+        <button class="btn btn-secondary" data-act="drop">⤓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="overModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content bg-dark text-light text-center">
+      <div class="modal-body p-4">
+        <h2 class="h4">Game selesai</h2>
+        <p>Skor akhir: <strong id="finalScore">0</strong></p>
+        <button class="btn btn-success" id="againBtn" data-bs-dismiss="modal">Main lagi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const COLS = 10, ROWS = 20, SIZE = 30;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('next');
+const nctx = nextCanvas.getContext('2d');
+
+const COLORS = { I:'#35c7e8', O:'#f2d03b', T:'#a66ee0', S:'#52c26b', Z:'#e8564f', J:'#4a79e0', L:'#f09a3a' };
+const SHAPES = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1],[0,0,0]],
+  S: [[0,1,1],[1,1,0],[0,0,0]],
+  Z: [[1,1,0],[0,1,1],[0,0,0]],
+  J: [[1,0,0],[1,1,1],[0,0,0]],
+  L: [[0,0,1],[1,1,1],[0,0,0]]
+};
+
+let board, piece, nextType, score, lines, level, dropInterval, lastTime, dropCounter, running, paused, rafId;
+
+const newBoard = () => Array.from({length: ROWS}, () => Array(COLS).fill(null));
+const randomType = () => Object.keys(SHAPES)[Math.floor(Math.random() * 7)];
+
+function makePiece(type) {
+  const m = SHAPES[type].map(r => r.slice());
+  return { type, m, x: Math.floor((COLS - m[0].length) / 2), y: 0 };
+}
+
+function collide(p, dx = 0, dy = 0, m = p.m) {
+  for (let y = 0; y < m.length; y++)
+    for (let x = 0; x < m[y].length; x++) {
+      if (!m[y][x]) continue;
+      const nx = p.x + x + dx, ny = p.y + y + dy;
+      if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+      if (ny >= 0 && board[ny][nx]) return true;
+    }
+  return false;
+}
+
+function rotateMatrix(m) {
+  return m[0].map((_, i) => m.map(r => r[i]).reverse());
+}
+
+function rotate() {
+  const r = rotateMatrix(piece.m);
+  for (const k of [0, -1, 1, -2, 2]) {
+    if (!collide(piece, k, 0, r)) { piece.m = r; piece.x += k; return; }
+  }
+}
+
+function move(dx) { if (!collide(piece, dx, 0)) piece.x += dx; }
+
+function lock() {
+  piece.m.forEach((row, y) => row.forEach((v, x) => {
+    if (v && piece.y + y >= 0) board[piece.y + y][piece.x + x] = piece.type;
+  }));
+  clearLines();
+  spawn();
+}
+
+function softDrop() {
+  if (!collide(piece, 0, 1)) { piece.y++; score += 1; }
+  else lock();
+  dropCounter = 0;
+  updateStats();
+}
+
+function hardDrop() {
+  let n = 0;
+  while (!collide(piece, 0, 1)) { piece.y++; n++; }
+  score += n * 2;
+  lock();
+  dropCounter = 0;
+  updateStats();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let y = ROWS - 1; y >= 0; y--) {
+    if (board[y].every(c => c)) {
+      board.splice(y, 1);
+      board.unshift(Array(COLS).fill(null));
+      cleared++; y++;
+    }
+  }
+  if (cleared) {
+    score += [0, 100, 300, 500, 800][cleared] * level;
+    lines += cleared;
+    level = Math.floor(lines / 10) + 1;
+    dropInterval = Math.max(100, 800 - (level - 1) * 70);
+  }
+}
+
+function spawn() {
+  piece = makePiece(nextType);
+  nextType = randomType();
+  drawNext();
+  if (collide(piece)) gameOver();
+}
+
+function drawCell(c, x, y, color, s = SIZE) {
+  c.fillStyle = color;
+  c.fillRect(x * s, y * s, s, s);
+  c.fillStyle = 'rgba(255,255,255,.22)';
+  c.fillRect(x * s, y * s, s, 4);
+  c.fillRect(x * s, y * s, 4, s);
+  c.fillStyle = 'rgba(0,0,0,.25)';
+  c.fillRect(x * s, y * s + s - 4, s, 4);
+  c.fillRect(x * s + s - 4, y * s, 4, s);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = 'rgba(255,255,255,.04)';
+  ctx.lineWidth = 1;
+  for (let x = 1; x < COLS; x++) { ctx.beginPath(); ctx.moveTo(x * SIZE, 0); ctx.lineTo(x * SIZE, canvas.height); ctx.stroke(); }
+  for (let y = 1; y < ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * SIZE); ctx.lineTo(canvas.width, y * SIZE); ctx.stroke(); }
+
+  board.forEach((row, y) => row.forEach((t, x) => { if (t) drawCell(ctx, x, y, COLORS[t]); }));
+  if (!piece) return;
+
+  // bayangan (ghost)
+  let gy = 0;
+  while (!collide(piece, 0, gy + 1)) gy++;
+  piece.m.forEach((row, y) => row.forEach((v, x) => {
+    if (v) {
+      ctx.fillStyle = 'rgba(255,255,255,.12)';
+      ctx.fillRect((piece.x + x) * SIZE, (piece.y + y + gy) * SIZE, SIZE, SIZE);
+    }
+  }));
+  piece.m.forEach((row, y) => row.forEach((v, x) => {
+    if (v && piece.y + y >= 0) drawCell(ctx, piece.x + x, piece.y + y, COLORS[piece.type]);
+  }));
+}
+
+function drawNext() {
+  nctx.clearRect(0, 0, 120, 120);
+  const m = SHAPES[nextType], s = 24;
+  const ox = (120 - m[0].length * s) / 2 / s, oy = (120 - m.length * s) / 2 / s;
+  m.forEach((row, y) => row.forEach((v, x) => { if (v) drawCell(nctx, x + ox, y + oy, COLORS[nextType], s); }));
+}
+
+function updateStats() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lines').textContent = lines;
+  document.getElementById('level').textContent = level;
+}
+
+function loop(time = 0) {
+  if (!running) return;
+  const dt = time - lastTime;
+  lastTime = time;
+  if (!paused) {
+    dropCounter += dt;
+    if (dropCounter > dropInterval) {
+      if (!collide(piece, 0, 1)) piece.y++; else lock();
+      dropCounter = 0;
+    }
+    draw();
+    updateStats();
+  }
+  rafId = requestAnimationFrame(loop);
+}
+
+function start() {
+  cancelAnimationFrame(rafId);
+  board = newBoard();
+  score = 0; lines = 0; level = 1;
+  dropInterval = 800; dropCounter = 0; lastTime = performance.now();
+  running = true; paused = false;
+  nextType = randomType();
+  spawn();
+  updateStats();
+  document.getElementById('pauseBtn').disabled = false;
+  document.getElementById('pauseBtn').textContent = 'Jeda';
+  document.getElementById('startBtn').textContent = 'Ulangi';
+  rafId = requestAnimationFrame(loop);
+}
+
+function togglePause() {
+  if (!running) return;
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? 'Lanjut' : 'Jeda';
+  if (paused) {
+    ctx.fillStyle = 'rgba(0,0,0,.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = '28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Dijeda', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+function gameOver() {
+  running = false;
+  cancelAnimationFrame(rafId);
+  document.getElementById('pauseBtn').disabled = true;
+  document.getElementById('finalScore').textContent = score;
+  new bootstrap.Modal(document.getElementById('overModal')).show();
+}
+
+function act(a) {
+  if (!running || paused) return;
+  if (a === 'left') move(-1);
+  else if (a === 'right') move(1);
+  else if (a === 'rotate') rotate();
+  else if (a === 'down') softDrop();
+  else if (a === 'drop') hardDrop();
+  draw();
+}
+
+document.addEventListener('keydown', e => {
+  const map = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'rotate', ArrowDown:'down', ' ':'drop' };
+  if (map[e.key]) { e.preventDefault(); act(map[e.key]); }
+  else if (e.key === 'p' || e.key === 'P') togglePause();
+});
+
+document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+document.getElementById('startBtn').addEventListener('click', start);
+document.getElementById('againBtn').addEventListener('click', start);
+document.getElementById('pauseBtn').addEventListener('click', togglePause);
+
+// tampilan awal
+board = newBoard(); piece = null; nextType = randomType();
+draw(); drawNext();
+</script>
+</body>
+</html>
