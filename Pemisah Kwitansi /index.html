@@ -83,6 +83,10 @@
       <div><label for="pTo">Sampai halaman</label><input id="pTo" type="number" min="1" value="1"></div>
       <div><label for="startNo">Nomor file pertama</label><input id="startNo" type="number" min="0" value="1"></div>
     </div>
+    <label for="reverse" style="display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--ink);cursor:pointer">
+      <input id="reverse" type="checkbox" checked style="width:auto"> Balik urutan (halaman terakhir menjadi file pertama)
+    </label>
+    <p class="hint">Centang jika urutan hasil terbalik, misalnya file nomor 1 ternyata berisi kwitansi terakhir. Isi tiap file tetap utuh dan hanya urutan penomorannya yang dibalik.</p>
     <p class="hint">Jika satu kwitansi memakai 2 halaman, isi "Halaman per file" dengan 2. Untuk 1 halaman = 1 kwitansi, biarkan 1.</p>
   </div>
 
@@ -138,6 +142,7 @@ function cfg(){
     bulan: $("bulan").value.trim(),
     pattern: $("pattern").value.trim() || "{bulan}_{no}",
     pad: parseInt($("pad").value,10),
+    reverse: $("reverse").checked,
     manual: $("manual").value.split(/\r?\n/).map(s=>s.trim()),
   };
 }
@@ -152,6 +157,7 @@ function validate(c){
 function groups(c){
   const g=[];
   for(let p=c.from;p<=c.to;p+=c.per) g.push([p,Math.min(p+c.per-1,c.to)]);
+  if(c.reverse) g.reverse();
   return g;
 }
 function nameFor(i,c){
@@ -169,8 +175,10 @@ function refresh(){
   const g=groups(c);
   let t=`Akan dibuat <b>${g.length}</b> file. Contoh: <b>${esc(nameFor(0,c))}</b>`;
   if(g.length>1) t+=` &nbsp;…&nbsp; <b>${esc(nameFor(g.length-1,c))}</b>`;
-  const lastSize=g[g.length-1][1]-g[g.length-1][0]+1;
-  if(lastSize<c.per) t+=`<br>File terakhir hanya berisi ${lastSize} halaman karena jumlah halaman tidak habis dibagi ${c.per}.`;
+  const pg=x=>x[0]===x[1]?`halaman ${x[0]}`:`halaman ${x[0]}–${x[1]}`;
+  t+=`<br>File pertama berisi ${pg(g[0])}` + (g.length>1?`, file terakhir berisi ${pg(g[g.length-1])}.`:`.`);
+  const small=g.find(x=>x[1]-x[0]+1<c.per);
+  if(small) t+=`<br>Satu file hanya berisi ${small[1]-small[0]+1} halaman karena jumlah halaman tidak habis dibagi ${c.per}.`;
   if(c.manual.filter(Boolean).length>g.length) t+=`<br>Daftar nama manual lebih banyak dari jumlah file; kelebihannya diabaikan.`;
   $("names").innerHTML=t;
 }
@@ -244,7 +252,8 @@ $("btnGo").addEventListener("click", async ()=>{
 });
 
 document.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{ $("pattern").value=b.dataset.pattern; refresh(); }));
-["perFile","pFrom","pTo","startNo","bulan","pattern","pad","manual"].forEach(id=>$(id).addEventListener("input",refresh));
+["perFile","pFrom","pTo","startNo","bulan","pattern","pad","manual","reverse"].forEach(id=>$(id).addEventListener("input",refresh));
+$("reverse").addEventListener("change",refresh);
 refresh();
 </script>
 </body>
