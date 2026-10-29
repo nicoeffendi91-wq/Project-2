@@ -300,6 +300,10 @@ kbd{
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 7l5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/></svg>
       Redo
     </button>
+    <button class="tbtn" id="btn-addpdf">+ Tambah PDF</button>
+    <button class="tbtn" id="btn-batch" title="Terapkan objek halaman aktif ke banyak PDF">Batch</button>
+    <button class="tbtn" id="btn-saveproj">Simpan Proyek</button>
+    <button class="tbtn" id="btn-loadproj">Buka Proyek</button>
     <div class="spacer"></div>
     <button class="tbtn primary" id="btn-export" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -355,6 +359,8 @@ kbd{
 </div>
 
 <input type="file" id="file-input" accept="application/pdf" hidden>
+<input type="file" id="add-input" accept="application/pdf" multiple hidden>
+<input type="file" id="proj-input" accept=".json,application/json" hidden>
 <input type="file" id="image-input" accept="image/*" hidden>
 
 <!-- ============ MODAL: Auto Number ============ -->
@@ -475,6 +481,8 @@ const TOOLS = [
   {id:'sep'},
   {id:'highlight', label:'Highlight', icon:`<path d="M5 19l4-4 10-10 3 3-10 10-4 4H5v-3Z"/>`},
   {id:'whiteout', label:'Whiteout', icon:`<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12h8"/>`},
+  {id:'redact', label:'Redaksi', icon:`<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/>`},
+  {id:'crop', label:'Crop', icon:`<path d="M6 2v16h16M2 6h16v16"/>`},
 ];
 const toolRail = document.getElementById('tools');
 TOOLS.forEach(t=>{
@@ -506,7 +514,9 @@ function setTool(id){
     line:'Klik lalu seret untuk menggambar garis.',
     arrow:'Klik lalu seret untuk menggambar panah.',
     highlight:'Klik lalu seret untuk menyorot area.',
-    whiteout:'Klik lalu seret untuk menutup area dengan putih.',
+    whiteout:'Klik lalu seret untuk menutup area dengan putih (teks asli TIDAK terhapus).',
+    redact:'Seret untuk meredaksi: saat export halaman ini dijadikan gambar, teks asli benar-benar hilang.',
+    crop:'Seret area yang dipertahankan. Kotak sangat kecil = hapus crop halaman ini.',
   };
   document.getElementById('status-hint').textContent = hints[id] || '';
 }
@@ -530,7 +540,7 @@ document.getElementById('file-input').addEventListener('change', async (e)=>{
 async function loadPdf(buf){
   pdfDoc = await pdfjsLib.getDocument({data: buf}).promise;
   numPages = pdfDoc.numPages;
-  pageStates = {}; historyStack=[]; historyIndex=-1; deletedPages = new Set(); thumbEls = {};
+  pageStates = {}; historyStack=[]; historyIndex=-1; deletedPages = new Set(); thumbEls = {}; cropBoxes={}; pageDims={};
   document.getElementById('filename-tag').textContent = fileLabel + '.pdf · ' + numPages + ' hal';
   document.getElementById('empty-state').style.display='none';
   document.getElementById('page-wrap').style.display='block';
@@ -593,7 +603,7 @@ async function renderPage(n, alsoLoadFabric=true){
 }
 
 function saveCurrentPageSilently(){
-  pageStates[currentPage] = JSON.stringify(fabricCanvas.toJSON(['selectable']));
+  pageStates[currentPage] = JSON.stringify(fabricCanvas.toJSON(['selectable','redact']));
 }
 
 async function goToPage(n){
@@ -606,29 +616,35 @@ async function goToPage(n){
 /* ============================================================
    THUMBNAILS
 ============================================================ */
+let dragFrom=null;
 async function buildThumbs(){
   const list = document.getElementById('thumb-list');
   list.innerHTML=''; thumbEls={};
+  const io = new IntersectionObserver(async es=>{
+    for(const e of es){
+      if(!e.isIntersecting) continue; io.unobserve(e.target);
+      const c=e.target.querySelector('canvas'); const page=await pdfDoc.getPage(+e.target.dataset.page);
+      const vp=page.getViewport({scale:0.22}); c.width=vp.width; c.height=vp.height;
+      await page.render({canvasContext:c.getContext('2d'), viewport:vp}).promise;
+    }
+  },{root:document.getElementById('thumbs'), rootMargin:'400px'});
   for(let n=1;n<=numPages;n++){
     const wrap=document.createElement('div');
-    wrap.className='thumb'; wrap.dataset.page=n;
-    const frame=document.createElement('div'); frame.className='frame';
-    const c=document.createElement('canvas');
-    frame.appendChild(c);
+    wrap.className='thumb'; wrap.dataset.page=n; wrap.draggable=true; wrap.title='Seret untuk mengubah urutan';
+    const frame=document.createElement('div'); frame.className='frame'; frame.style.minHeight='90px';
+    frame.appendChild(document.createElement('canvas'));
     const delBtn=document.createElement('button');
-    delBtn.className='del-btn'; delBtn.title='Hapus halaman';
-    delBtn.innerHTML = trashIconSvg();
+    delBtn.className='del-btn'; delBtn.title='Hapus halaman'; delBtn.innerHTML = trashIconSvg();
     delBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleDeletePage(n); });
     frame.appendChild(delBtn);
+    if(deletedPages.has(n)){ wrap.classList.add('deleted'); delBtn.innerHTML=restoreIconSvg(); delBtn.title='Pulihkan halaman'; }
     const pno=document.createElement('div'); pno.className='pno'; pno.textContent=String(n).padStart(2,'0');
     wrap.appendChild(frame); wrap.appendChild(pno);
     wrap.addEventListener('click', ()=>{ if(!deletedPages.has(n)) goToPage(n); else toast('Halaman ini dihapus — klik ikon pulihkan untuk mengembalikan'); });
-    list.appendChild(wrap);
-    thumbEls[n]=wrap;
-    const page = await pdfDoc.getPage(n);
-    const vp = page.getViewport({scale: 0.22});
-    c.width=vp.width; c.height=vp.height;
-    await page.render({canvasContext:c.getContext('2d'), viewport:vp}).promise;
+    wrap.addEventListener('dragstart', ()=>{ dragFrom=n; });
+    wrap.addEventListener('dragover', (e)=>e.preventDefault());
+    wrap.addEventListener('drop', (e)=>{ e.preventDefault(); if(dragFrom!==null) reorder(dragFrom,n); dragFrom=null; });
+    list.appendChild(wrap); thumbEls[n]=wrap; io.observe(wrap);
   }
   highlightActiveThumb(currentPage);
 }
@@ -714,7 +730,7 @@ function syncZoomSelect(){
 ============================================================ */
 function pushHistory(force){
   if(suppressHistory && !force) return;
-  const json = JSON.stringify(fabricCanvas.toJSON(['selectable']));
+  const json = JSON.stringify(fabricCanvas.toJSON(['selectable','redact']));
   historyStack = historyStack.slice(0, historyIndex+1);
   historyStack.push({page: currentPage, json});
   historyIndex++;
@@ -803,6 +819,8 @@ fabricCanvas.on('mouse:down', (opt)=>{
   } else if(currentTool==='whiteout'){
     liveObj = new fabric.Rect({...common, width:1, height:1, fill:'#ffffff', opacity:1});
   }
+  if(currentTool==='redact') liveObj=new fabric.Rect({...common,width:1,height:1,fill:'#000000',opacity:1,redact:true});
+  if(currentTool==='crop') liveObj=new fabric.Rect({...common,width:1,height:1,fill:'rgba(37,99,235,.12)',stroke:'#2563eb',strokeWidth:1,cropMark:true});
   if(liveObj) fabricCanvas.add(liveObj);
 });
 fabricCanvas.on('mouse:move', (opt)=>{
@@ -826,6 +844,7 @@ fabricCanvas.on('mouse:up', ()=>{
   if(!drawing) return;
   drawing=false;
   if(liveObj){
+    if(liveObj.cropMark){ setCrop(liveObj); fabricCanvas.remove(liveObj); liveObj=null; setTool('select'); return; }
     liveObj.set({selectable:true, evented:true});
     if((liveObj.width && liveObj.width<3) || (liveObj.rx && liveObj.rx<2)){
       fabricCanvas.remove(liveObj); // discard accidental tiny click-shapes
@@ -898,14 +917,14 @@ document.getElementById('num-apply').addEventListener('click', async ()=>{
             const tmp = new fabric.StaticCanvas(null,{width:1,height:1});
             loaded.forEach(o=>tmp.add(o));
             tmp.add(txt);
-            pageStates[n] = JSON.stringify(tmp.toJSON(['selectable']));
+            pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact']));
             res();
           });
         });
       } else {
         const tmp = new fabric.StaticCanvas(null,{width:1,height:1});
         tmp.add(txt);
-        pageStates[n] = JSON.stringify(tmp.toJSON(['selectable']));
+        pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact']));
       }
       val += step;
     }
@@ -1046,6 +1065,11 @@ function renderProps(){
       <label class="chk"><input type="checkbox" id="p-bold" ${obj.fontWeight==='bold'?'checked':''}> Bold</label>
       <label class="chk"><input type="checkbox" id="p-italic" ${obj.fontStyle==='italic'?'checked':''}> Italic</label>
     </div>
+    <div class="field"><label>Font</label><select id="p-font">${['Helvetica','Times','Courier'].map(k=>`<option ${fontKey(obj.fontFamily||'')===k?'selected':''}>${k}</option>`).join('')}</select></div>
+    <div class="row2">
+      <div class="field"><label>Spasi baris</label><input type="number" step="0.1" min="0.8" max="3" id="p-lh" value="${obj.lineHeight||1.16}"></div>
+      <div class="field"><label>Rotasi °</label><input type="number" id="p-angle" value="${Math.round(obj.angle||0)}"></div>
+    </div>
     <div class="field"><label>Alignment</label>
       <select id="p-align">
         <option value="left" ${obj.textAlign==='left'?'selected':''}>Kiri</option>
@@ -1079,6 +1103,9 @@ function renderProps(){
   bind('p-bold','change', (e)=>{ obj.set('fontWeight', e.target.checked?'bold':'normal'); fabricCanvas.requestRenderAll(); });
   bind('p-italic','change', (e)=>{ obj.set('fontStyle', e.target.checked?'italic':'normal'); fabricCanvas.requestRenderAll(); });
   bind('p-align','change', (e)=>{ obj.set('textAlign', e.target.value); fabricCanvas.requestRenderAll(); });
+  bind('p-font','change', (e)=>{ obj.set('fontFamily', FONTCSS[e.target.value]); fabricCanvas.requestRenderAll(); });
+  bind('p-lh','input', (e)=>{ obj.set('lineHeight', parseFloat(e.target.value)||1.16); fabricCanvas.requestRenderAll(); });
+  bind('p-angle','input', (e)=>{ obj.set('angle', parseFloat(e.target.value)||0); obj.setCoords(); fabricCanvas.requestRenderAll(); });
   bind('p-fill','input', (e)=>{ obj.set('fill', e.target.value); fabricCanvas.requestRenderAll(); });
   bind('p-stroke','input', (e)=>{ obj.set('stroke', e.target.value); fabricCanvas.requestRenderAll(); });
   bind('p-opacity','input', (e)=>{ obj.set('opacity', e.target.value/100); document.getElementById('p-op-val').textContent=e.target.value+'%'; fabricCanvas.requestRenderAll(); });
@@ -1089,7 +1116,7 @@ function renderProps(){
   });
   bind('p-delete','click', ()=>{ fabricCanvas.remove(obj); fabricCanvas.discardActiveObject(); pushHistory(); clearProps(); });
 
-  ['p-text','p-fontsize','p-color','p-bold','p-italic','p-align','p-fill','p-stroke','p-left','p-top'].forEach(id=>{
+  ['p-text','p-fontsize','p-color','p-bold','p-italic','p-align','p-font','p-lh','p-angle','p-opacity','p-fill','p-stroke','p-left','p-top'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.addEventListener('change', ()=>pushHistory());
   });
 }
@@ -1132,98 +1159,94 @@ function downloadBytes(bytes){
   toast('PDF berhasil diunduh — teks tetap bisa diseleksi & dicari');
 }
 
+/* ===== helpers: font, range, filename, save ===== */
+const FONTCSS={Helvetica:'Helvetica, Arial, sans-serif',Times:'"Times New Roman", Times, serif',Courier:'"Courier New", Courier, monospace'};
+function fontKey(f){ return /courier|mono/i.test(f)?'Courier':(/times|serif/i.test(f)&&!/sans/i.test(f))?'Times':'Helvetica'; }
+const FM={Helvetica:['Helvetica','HelveticaBold','HelveticaOblique','HelveticaBoldOblique'],Times:['TimesRoman','TimesRomanBold','TimesRomanItalic','TimesRomanBoldItalic'],Courier:['Courier','CourierBold','CourierOblique','CourierBoldOblique']};
+function parseRange(s,max){ s=s.trim(); if(!s) return null; const r=new Set();
+  s.split(',').forEach(p=>{ const m=p.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/); if(m){ const a=+m[1], b=+(m[2]||m[1]); for(let i=Math.max(1,a);i<=Math.min(max,b);i++) r.add(i); } });
+  return r; }
+function fmtName(pat,n,nama){ const d=new Date(), p=x=>String(x).padStart(2,'0');
+  return pat.replace(/\{nama\}/g,nama||fileLabel||'dokumen').replace(/\{n\}/g,String(n||1).padStart(3,'0'))
+    .replace(/\{tanggal\}/g,`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`).replace(/\{jam\}/g,`${p(d.getHours())}${p(d.getMinutes())}`); }
+async function saveBytes(bytes,name,dir){
+  name=name.replace(/[\\/:*?"<>|]/g,'_'); if(!/\.pdf$/i.test(name)) name+='.pdf';
+  const put=async(fh)=>{ const w=await fh.createWritable(); await w.write(bytes); await w.close(); };
+  if(dir){ await put(await dir.getFileHandle(name,{create:true})); return; }
+  if(window.showSaveFilePicker){
+    try{ const fh=await showSaveFilePicker({suggestedName:name,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]}); await put(fh); toast('Tersimpan: '+fh.name); return; }
+    catch(e){ if(e.name==='AbortError'){ toast('Export dibatalkan'); return; } }
+  }
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); const a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+  toast('PDF diunduh: '+name);
+}
+const safeTxt=(f,t)=>[...t].map(ch=>{ try{ f.encodeText(ch); return ch; }catch(e){ return '?'; } }).join('');
+
 async function exportPdf(){
   if(!pdfDoc) return;
-  if(activePageCount()<1){ toast('Semua halaman ditandai hapus — tidak ada yang bisa diexport'); return; }
   saveCurrentPageSilently();
+  const pat=prompt('Nama file. Pola: {nama} {tanggal} {jam}', '{nama}-edit'); if(pat===null) return;
+  const rg=prompt('Rentang halaman (mis. 1-3,5). Kosongkan = semua:',''); if(rg===null) return;
+  const rng=parseRange(rg,numPages);
+  const keep=new Set([...Array(numPages)].map((_,i)=>i+1).filter(n=>!deletedPages.has(n)&&(!rng||rng.has(n))));
+  if(!keep.size){ toast('Tidak ada halaman yang dipilih'); return; }
   toast('Mengekspor PDF…');
   try{
-    await exportPdfVector();
+    const bytes=await buildPdf({bytes:originalBytes,doc:pdfDoc,states:pageStates,keep,crops:cropBoxes,dimsOf:getPageDims});
+    await saveBytes(bytes,fmtName(pat));
   }catch(err){
-    console.error('Vector export failed, falling back to flatten:', err);
-    toast('Format PDF ini tidak bisa diedit langsung — memakai mode gambar…');
+    console.error('Export gagal, fallback ke mode gambar:',err);
+    toast('Mode gambar dipakai (rentang halaman & crop diabaikan)…');
     await exportPdfFlatten();
   }
 }
 
-async function exportPdfVector(){
-  const outPdf = await PDFDocument.load(originalBytes.slice(0));
-  const fontRegular = await outPdf.embedFont(StandardFonts.Helvetica);
-  const fontBold = await outPdf.embedFont(StandardFonts.HelveticaBold);
-  const fontItalic = await outPdf.embedFont(StandardFonts.HelveticaOblique);
-  const fontBoldItalic = await outPdf.embedFont(StandardFonts.HelveticaBoldOblique);
-  const outPages = outPdf.getPages();
-  const quality = 2.5; // supersample for the non-text overlay only
-
-  for(let n=1;n<=numPages;n++){
-    if(deletedPages.has(n)) continue;
-    const dims = await getPageDims(n);
-    const pageW = dims.w, pageH = dims.h;
-    const outPage = outPages[n-1];
-    if(!outPage) continue;
-    const json = pageStates[n];
-    if(!json) continue;
-    const parsed = JSON.parse(json);
-    const objects = parsed.objects || [];
-    const textTypes = ['textbox','i-text','text'];
-    const textObjs = objects.filter(o=>textTypes.includes(o.type));
-    const otherObjs = objects.filter(o=>!textTypes.includes(o.type));
-
-    // non-text objects -> one transparent raster overlay per page
-    if(otherObjs.length){
-      const pxW = Math.round(pageW*quality), pxH = Math.round(pageH*quality);
-      const off = new fabric.StaticCanvas(null, {width: pxW, height: pxH});
-      off.setZoom(quality);
-      await new Promise(res=>{
-        off.loadFromJSON({objects: otherObjs}, ()=>{ off.renderAll(); res(); });
-      });
-      const dataUrl = off.lowerCanvasEl.toDataURL('image/png');
-      const pngBytes = await (await fetch(dataUrl)).arrayBuffer();
-      const png = await outPdf.embedPng(pngBytes);
-      outPage.drawImage(png, {x:0, y:0, width:pageW, height:pageH});
-      off.dispose();
-    }
-
-    // text objects -> real vector, selectable text
-    for(const o of textObjs){
-      const text = (o.text||'');
-      if(!text.trim()) continue;
-      const scaleY = o.scaleY||1, scaleX = o.scaleX||1;
-      const size = Math.max(1,(o.fontSize||16)*scaleY);
-      const boxWidth = (o.width||100)*scaleX;
-      const bold = o.fontWeight==='bold' || (typeof o.fontWeight==='number' && o.fontWeight>=600);
-      const italic = o.fontStyle==='italic';
-      const font = bold&&italic ? fontBoldItalic : bold ? fontBold : italic ? fontItalic : fontRegular;
-      const c = hexToRgb01(o.fill);
-      const opacity = (o.opacity??1);
-      const lineHeightFactor = o.lineHeight || 1.16;
-      const lineHeight = size*lineHeightFactor;
-      const ascent = size*0.8; // approximation of Helvetica ascent
-      let y = pageH - o.top - ascent;
-      const lines = text.split('\n');
-      for(const line of lines){
-        if(line.length){
-          let lw = 0;
-          try{ lw = font.widthOfTextAtSize(line, size); }catch(e){ lw = line.length*size*0.55; }
-          let x = o.left;
-          if(o.textAlign==='center') x = o.left + Math.max(0,(boxWidth-lw)/2);
-          else if(o.textAlign==='right') x = o.left + Math.max(0,(boxWidth-lw));
-          try{
-            outPage.drawText(line, {x, y, size, font, color: rgb(c.r,c.g,c.b), opacity});
-          }catch(e){ /* skip characters the standard font can't encode */ }
-        }
-        y -= lineHeight;
+async function buildPdf(o){
+  const out=await PDFDocument.load(o.bytes.slice(0));
+  const F={}; const getFont=async k=>F[k]||(F[k]=await out.embedFont(StandardFonts[k]));
+  const pgs=out.getPages(), Q=2.5, textTypes=['textbox','i-text','text'];
+  for(let n=1;n<=pgs.length;n++){
+    if(!o.keep.has(n)) continue;
+    const {w:pw,h:ph}=await o.dimsOf(n); let pg=pgs[n-1];
+    const st=o.states[n]; const objs=st?(JSON.parse(st).objects||[]):[];
+    if(objs.some(x=>x.redact)){
+      // REDAKSI SEJATI: halaman dirasterisasi, teks/konten asli hilang
+      const pr=await o.doc.getPage(n), vp=pr.getViewport({scale:2.2}), cv=document.createElement('canvas');
+      cv.width=vp.width; cv.height=vp.height;
+      await pr.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+      const off=new fabric.StaticCanvas(null,{width:cv.width,height:cv.height}); off.setZoom(2.2);
+      await new Promise(r=>off.loadFromJSON(st,()=>{off.renderAll();r();}));
+      cv.getContext('2d').drawImage(off.lowerCanvasEl,0,0); off.dispose();
+      const img=await out.embedPng(await (await fetch(cv.toDataURL('image/png'))).arrayBuffer());
+      out.removePage(n-1); pg=out.insertPage(n-1,[pw,ph]); pg.drawImage(img,{x:0,y:0,width:pw,height:ph});
+    } else {
+      const others=objs.filter(x=>!textTypes.includes(x.type));
+      if(others.length){
+        const off=new fabric.StaticCanvas(null,{width:Math.round(pw*Q),height:Math.round(ph*Q)}); off.setZoom(Q);
+        await new Promise(r=>off.loadFromJSON({objects:others},()=>{off.renderAll();r();}));
+        const png=await out.embedPng(await (await fetch(off.lowerCanvasEl.toDataURL('image/png'))).arrayBuffer());
+        pg.drawImage(png,{x:0,y:0,width:pw,height:ph}); off.dispose();
+      }
+      for(const t of objs.filter(x=>textTypes.includes(x.type))){
+        const text=t.text||''; if(!text.trim()) continue;
+        const size=Math.max(1,(t.fontSize||16)*(t.scaleY||1)), bw=(t.width||100)*(t.scaleX||1);
+        const bold=t.fontWeight==='bold'||(+t.fontWeight>=600), it=t.fontStyle==='italic';
+        const font=await getFont(FM[fontKey(t.fontFamily||'')][(bold?1:0)+(it?2:0)]);
+        const c=hexToRgb01(t.fill), lh=size*(t.lineHeight||1.16), asc=size*0.8;
+        const th=(t.angle||0)*Math.PI/180, cs=Math.cos(th), sn=Math.sin(th);
+        text.split('\n').forEach((raw,k)=>{
+          const line=safeTxt(font,raw); if(!line) return;
+          const lw=font.widthOfTextAtSize(line,size);
+          const lx=t.textAlign==='center'?Math.max(0,(bw-lw)/2):t.textAlign==='right'?Math.max(0,bw-lw):0, ly=asc+k*lh;
+          pg.drawText(line,{x:t.left+lx*cs-ly*sn, y:ph-(t.top+lx*sn+ly*cs), size, font, color:rgb(c.r,c.g,c.b), opacity:t.opacity??1, rotate:degrees(-(t.angle||0))});
+        });
       }
     }
+    const cb=o.crops[n]; if(cb) pg.setCropBox(cb.x, ph-cb.y-cb.h, cb.w, cb.h);
   }
-
-  // physically remove marked pages (descending so earlier indices stay valid)
-  for(let n=numPages;n>=1;n--){
-    if(deletedPages.has(n)) outPdf.removePage(n-1);
-  }
-
-  const bytes = await outPdf.save();
-  downloadBytes(bytes);
+  for(let n=pgs.length;n>=1;n--) if(!o.keep.has(n)) out.removePage(n-1);
+  return await out.save();
 }
 
 // Fallback: full flatten to image (used only if the source PDF can't be edited directly by pdf-lib)
@@ -1261,6 +1284,112 @@ async function exportPdfFlatten(){
 /* ============================================================
    MISC
 ============================================================ */
+/* ============================================================
+   CROP, GUIDES, REORDER, MERGE, PROJECT, BATCH
+============================================================ */
+let cropBoxes={}, guides=[];
+function setCrop(r){
+  const b={x:Math.max(0,r.left),y:Math.max(0,r.top),w:r.width,h:r.height};
+  const apply=(fn)=>{ if(confirm('Terapkan ke semua halaman? (OK = semua, Batal = halaman ini saja)')) for(let n=1;n<=numPages;n++) fn(n); else fn(currentPage); };
+  if(b.w<8||b.h<8){ apply(n=>{ delete cropBoxes[n]; }); toast('Crop dihapus'); }
+  else { apply(n=>{ cropBoxes[n]={...b}; }); toast('Crop diatur (diterapkan saat export)'); }
+  fabricCanvas.requestRenderAll();
+}
+fabricCanvas.on('after:render',()=>{
+  const c=fabricCanvas.contextContainer, z=zoom, W=fabricCanvas.getWidth(), H=fabricCanvas.getHeight(), cb=cropBoxes[currentPage];
+  if(cb){ c.save(); c.fillStyle='rgba(0,0,0,.45)'; c.beginPath(); c.rect(0,0,W,H); c.rect(cb.x*z,cb.y*z,cb.w*z,cb.h*z); c.fill('evenodd');
+    c.strokeStyle='#2563eb'; c.strokeRect(cb.x*z,cb.y*z,cb.w*z,cb.h*z); c.restore(); }
+  if(guides.length){ c.save(); c.strokeStyle='#e11d8f'; c.lineWidth=1; c.setLineDash([4,3]);
+    guides.forEach(g=>{ c.beginPath(); if(g.x!=null){ c.moveTo(g.x*z,0); c.lineTo(g.x*z,H); } else { c.moveTo(0,g.y*z); c.lineTo(W,g.y*z); } c.stroke(); }); c.restore(); }
+});
+fabricCanvas.on('object:moving',(e)=>{
+  const o=e.target; if(!o||o.type==='activeSelection') return;
+  const z=zoom, W=fabricCanvas.getWidth()/z, H=fabricCanvas.getHeight()/z, th=6/z, M=36; guides=[];
+  const sn=(v,ts)=>{ for(const t of ts) for(const a of v) if(Math.abs(a-t)<th) return [t-a,t]; return null; };
+  let r=o.getBoundingRect(true,true);
+  let s=sn([r.left,r.left+r.width/2,r.left+r.width],[M,W/2,W-M]); if(s){ o.left+=s[0]; guides.push({x:s[1]}); }
+  r=o.getBoundingRect(true,true);
+  s=sn([r.top,r.top+r.height/2,r.top+r.height],[M,H/2,H-M]); if(s){ o.top+=s[0]; guides.push({y:s[1]}); }
+});
+fabricCanvas.on('mouse:up',()=>{ if(guides.length){ guides=[]; fabricCanvas.requestRenderAll(); } });
+window.addEventListener('beforeunload',(e)=>{ if(pdfDoc){ e.preventDefault(); e.returnValue=''; } });
+
+async function reloadDoc(bytes,go){
+  originalBytes=bytes; pdfDoc=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
+  numPages=pdfDoc.numPages; pageDims={}; historyStack=[]; historyIndex=-1;
+  currentPage=Math.min(Math.max(1,go||1),numPages);
+  document.getElementById('filename-tag').textContent=fileLabel+'.pdf · '+numPages+' hal';
+  await buildThumbs(); await renderPage(currentPage); updateUndoRedoButtons();
+}
+async function reorder(a,b){
+  if(a===b) return; saveCurrentPageSilently();
+  const ord=[...Array(numPages)].map((_,i)=>i+1); ord.splice(ord.indexOf(a),1); ord.splice(b-1,0,a);
+  try{
+    const src=await PDFDocument.load(originalBytes.slice(0)), dst=await PDFDocument.create();
+    (await dst.copyPages(src,ord.map(i=>i-1))).forEach(p=>dst.addPage(p));
+    const rm=o=>{ const r={}; ord.forEach((old,i)=>{ if(o[old]!==undefined) r[i+1]=o[old]; }); return r; };
+    pageStates=rm(pageStates); cropBoxes=rm(cropBoxes);
+    deletedPages=new Set(ord.map((old,i)=>deletedPages.has(old)?i+1:0).filter(Boolean));
+    await reloadDoc(await dst.save(), ord.indexOf(currentPage)+1);
+    toast(`Halaman ${a} dipindah ke posisi ${b} (riwayat undo direset)`);
+  }catch(err){ console.error(err); toast('Gagal mengubah urutan: '+err.message); }
+}
+document.getElementById('btn-addpdf').addEventListener('click',()=>{ if(!pdfDoc) return toast('Buka PDF terlebih dahulu'); document.getElementById('add-input').click(); });
+document.getElementById('add-input').addEventListener('change',async(e)=>{
+  const fs=[...e.target.files]; e.target.value=''; if(!fs.length) return;
+  saveCurrentPageSilently();
+  try{
+    const A=await PDFDocument.load(originalBytes.slice(0));
+    for(const f of fs){ const B=await PDFDocument.load(await f.arrayBuffer(),{ignoreEncryption:true}); (await A.copyPages(B,B.getPageIndices())).forEach(p=>A.addPage(p)); }
+    await reloadDoc(await A.save(),currentPage); toast(`${fs.length} PDF ditambahkan di akhir — seret thumbnail untuk mengatur urutan`);
+  }catch(err){ console.error(err); toast('Gagal menambah PDF: '+err.message); }
+});
+
+const b64=u8=>{ let s=''; for(let i=0;i<u8.length;i+=32768) s+=String.fromCharCode.apply(null,u8.subarray(i,i+32768)); return btoa(s); };
+document.getElementById('btn-saveproj').addEventListener('click',()=>{
+  if(!pdfDoc) return toast('Belum ada dokumen'); saveCurrentPageSilently();
+  const data=JSON.stringify({v:1,name:fileLabel,pdf:b64(new Uint8Array(originalBytes)),pageStates,deleted:[...deletedPages],crops:cropBoxes,page:currentPage});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  a.download=(fileLabel||'proyek')+'.pdfproj.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('Proyek disimpan');
+});
+document.getElementById('btn-loadproj').addEventListener('click',()=>document.getElementById('proj-input').click());
+document.getElementById('proj-input').addEventListener('change',async(e)=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const p=JSON.parse(await f.text()); const u8=Uint8Array.from(atob(p.pdf),c=>c.charCodeAt(0));
+    fileLabel=p.name||'proyek'; originalBytes=u8.slice(); await loadPdf(u8);
+    pageStates=p.pageStates||{}; deletedPages=new Set(p.deleted||[]); cropBoxes=p.crops||{};
+    await buildThumbs(); currentPage=Math.min(p.page||1,numPages); await renderPage(currentPage); toast('Proyek dibuka');
+  }catch(err){ console.error(err); toast('File proyek tidak valid'); }
+});
+
+document.getElementById('btn-batch').addEventListener('click',async()=>{
+  if(!pdfDoc) return toast('Buka PDF template terlebih dahulu'); saveCurrentPageSilently();
+  const tpl=pageStates[currentPage];
+  if(!tpl||!(JSON.parse(tpl).objects||[]).length) return toast('Tambahkan nomor/stempel/teks di halaman ini dulu — itulah yang diterapkan ke semua PDF. Tulis {n} di teks untuk nomor urut.');
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='application/pdf'; inp.multiple=true;
+  inp.onchange=async()=>{
+    const fs=[...inp.files]; if(!fs.length) return;
+    const all=confirm('Terapkan objek ke SEMUA halaman tiap PDF? (Batal = hanya halaman 1)');
+    const c0=parseInt(prompt('Nomor awal untuk {n}:','1'))||1;
+    const pat=prompt('Pola nama file: {nama} {n} {tanggal} {jam}','{nama}-edit'); if(pat===null) return;
+    let dir=null; if(window.showDirectoryPicker){ try{ dir=await showDirectoryPicker({mode:'readwrite'}); }catch(e){} }
+    for(const [i,f] of fs.entries()){
+      toast(`Memproses ${i+1}/${fs.length}: ${f.name}`);
+      try{
+        const bytes=new Uint8Array(await f.arrayBuffer()), doc=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
+        const T=JSON.parse(tpl); T.objects.forEach(x=>{ if(typeof x.text==='string') x.text=x.text.replace(/\{n\}/g,String(c0+i)); });
+        const js=JSON.stringify(T), st={}; for(let n=1;n<=(all?doc.numPages:1);n++) st[n]=js;
+        const out=await buildPdf({bytes,doc,states:st,keep:new Set([...Array(doc.numPages)].map((_,k)=>k+1)),crops:{},
+          dimsOf:async n=>{ const v=(await doc.getPage(n)).getViewport({scale:1}); return {w:v.width,h:v.height}; }});
+        await saveBytes(out,fmtName(pat,c0+i,f.name.replace(/\.pdf$/i,'')),dir);
+      }catch(err){ console.error(err); toast('Gagal: '+f.name); }
+    }
+    toast('Batch selesai');
+  };
+  inp.click();
+});
+
 function toast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
