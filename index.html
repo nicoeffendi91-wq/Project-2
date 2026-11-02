@@ -1222,9 +1222,7 @@ function unduhXlsx(){
   XLSX.utils.book_append_sheet(wb,ws4,"Rincian Dokumen");
 
   if(TAMPILAN==="pagu" || adaPaguManual()){
-    const [wsP1,wsP2]=lembarPagu(rows);
-    XLSX.utils.book_append_sheet(wb,wsP1,"Pagu per Bidang");
-    XLSX.utils.book_append_sheet(wb,wsP2,"Pagu Keseluruhan");
+    XLSX.utils.book_append_sheet(wb,lembarPagu(rows),"Pagu per Bidang");
   }
   XLSX.writeFile(wb,namaBerkas("xlsx"));
   toast("Excel diunduh.");
@@ -1485,21 +1483,19 @@ function unduhLra(){
 
 /* ============================================================
    PAGU MANUAL  (berlapis: Bidang › Sub kegiatan › Kode rekening)
-   Dua pagu per kode rekening di setiap sub kegiatan, ditambah satu
-   pagu keseluruhan pada tingkat yang sama. Semua diisi tangan.
-   DB.paguManual = { v:3, n1,nAll,           // nama kolom
+   Satu pagu per kode rekening di setiap sub kegiatan, diisi tangan.
+   DB.paguManual = { v:3, n1,                // nama kolom pagu
                      bid:{"bidang|sub|rek":nilai},
-                     all:{"bidang|sub|rek":nilai},
                      extra:{"bidang|sub|rek":nama rekening},   // baris tambahan manual
-                     subNama:{"sub":nama sub kegiatan},        // nama sub kegiatan manual
-                     allLama:{"rek":nilai} }                   // pagu keseluruhan versi lama yang belum bisa dipetakan
+                     subNama:{"sub":nama sub kegiatan} }       // nama sub kegiatan manual
    ============================================================ */
 const TSUB="(tanpa sub kegiatan)", TREK="(tanpa rekening)";
-const BUKAP=new Set();      // simpul pohon pagu yang terbuka: "A:bidang", "A:bidang|sub", "B:..."
+const BUKAP=new Set();      // simpul pohon pagu yang terbuka: "A:bidang", "A:bidang|sub"
 function PM(){
   const p=DB.paguManual||(DB.paguManual={});
-  p.n1=(!p.n1||p.n1==="Pagu 1")?"Pagu":p.n1; p.nAll=p.nAll||"Pagu Keseluruhan";
-  p.bid=p.bid||{}; p.all=p.all||{}; p.extra=p.extra||{}; p.subNama=p.subNama||{};
+  p.n1=(!p.n1||p.n1==="Pagu 1")?"Pagu":p.n1;
+  p.bid=p.bid||{}; p.extra=p.extra||{}; p.subNama=p.subNama||{};
+  delete p.all; delete p.allLama; delete p.nAll;     // pagu keseluruhan sudah dihapus
   if(p.v!==2 && p.v!==3) migrasiPagu(p);
   if(p.v!==3){      // versi 3: satu pagu per baris (Pagu 1 + Pagu 2 lama dijumlahkan)
     Object.keys(p.bid).forEach(k=>{ const a=p.bid[k]; if(Array.isArray(a)){ const t=(a[0]||0)+(a[1]||0); if(t) p.bid[k]=t; else delete p.bid[k]; } });
@@ -1523,21 +1519,10 @@ function migrasiPagu(p){
     Object.keys(lama).forEach(key=>{ nb[dua(key)?baru(key):key]=lama[key]; });
     p[f]=nb;
   });
-  Object.keys(p.bid).concat(Object.keys(p.extra)).forEach(key=>{
-    const [b,s,k]=pecahKunci(key); (kombi[k]||(kombi[k]=new Set())).add(b+"|"+s);
-  });
-  const na={}, sisa={};
-  Object.keys(p.all).forEach(key=>{
-    if(key.includes("|")){ na[key]=p.all[key]; return; }
-    const st=kombi[key];
-    if(st && st.size===1) na[[...st][0]+"|"+key]=p.all[key]; else sisa[key]=p.all[key];
-  });
-  p.all=na;
-  if(Object.keys(sisa).length) p.allLama=Object.assign(p.allLama||{},sisa);
   p.v=2;
 }
 function adaPaguManual(){
-  const p=DB.paguManual; return !!(p && (Object.keys(p.bid||{}).length||Object.keys(p.all||{}).length));
+  const p=DB.paguManual; return !!(p && Object.keys(p.bid||{}).length);
 }
 let tmrPagu;
 function simpanPaguTunda(){ clearTimeout(tmrPagu); tmrPagu=setTimeout(()=>Store.save(DB).catch(e=>toast(e.message,true)),500); }
@@ -1555,7 +1540,6 @@ function susunPaguManual(rows){
   });
   Object.keys(P.extra).forEach(key=>{ const [b,s,k]=pecahKunci(key); taruh(b,s,k); if(P.extra[key]&&!namaRek[k]) namaRek[k]=P.extra[key]; });
   Object.keys(P.bid).forEach(key=>{ const [b,s,k]=pecahKunci(key); taruh(b,s,k); });
-  Object.keys(P.all).forEach(key=>{ const [b,s,k]=pecahKunci(key); taruh(b,s,k); });
   Object.keys(P.subNama).forEach(s=>{ if(P.subNama[s]&&!namaSub[s]) namaSub[s]=P.subNama[s]; });
   const real={};
   rows.forEach(r=>{
@@ -1571,17 +1555,17 @@ function susunPaguManual(rows){
       kode:k, nama:namaRek[k]||"", key:b+"|"+s+"|"+k, bisaHapus:!adaData.has(b+"|"+s+"|"+k)}))}))}));
   return {bid,real,namaSub};
 }
-/* Hitung jumlah di setiap tingkat; hasil ditaruh di simpul: p,all,real */
+/* Hitung jumlah di setiap tingkat; hasil ditaruh di simpul: p,real */
 function hitungPagu(D){
-  const P=PM(), nol=()=>({p:0,all:0,eff:0,real:0});
-  const tambah=(t,x)=>{ t.p+=x.p; t.all+=x.all; t.eff+=x.eff; t.real+=x.real; };
+  const P=PM(), nol=()=>({p:0,real:0});
+  const tambah=(t,x)=>{ t.p+=x.p; t.real+=x.real; };
   const G=nol();
   D.bid.forEach(B=>{
     Object.assign(B,nol());
     B.sub.forEach(Sb=>{
       Object.assign(Sb,nol());
       Sb.rek.forEach(R=>{
-        R.p=P.bid[R.key]||0; R.all=P.all[R.key]||0; R.eff=R.all||R.p; R.real=D.real[R.key]||0;
+        R.p=P.bid[R.key]||0; R.real=D.real[R.key]||0;
         tambah(Sb,R);
       });
       tambah(B,Sb);
@@ -1595,29 +1579,22 @@ function gambarPagu(rows,wrap){
   const P=PM(), D=susunPaguManual(rows);
 
   const mkCell=(lab,cls)=>{ const v=el("div",{class:"val num"}); return {v,node:el("div",{class:"cell "+(cls||"")},el("div",{class:"lab"},lab),v)}; };
-  const bBid=mkCell(P.n1+" (jumlah bidang)"),
-        bAll=mkCell(P.nAll,"grand"), bReal=mkCell("Realisasi"), bSisa=mkCell("Sisa pagu bidang");
+  const bBid=mkCell(P.n1,"grand"), bReal=mkCell("Realisasi"), bSisa=mkCell("Sisa pagu");
 
   const buka=id=>BUKAP.has(id);
   const twist=id=>el("button",{class:"twist","aria-expanded":String(buka(id)),
     onclick:()=>{ buka(id)?BUKAP.delete(id):BUKAP.add(id); gambarRekap(); }}, buka(id)?"\u25BC":"\u25B6");
-  const bukaSemua=()=>{ D.bid.forEach(B=>["A:","B:"].forEach(t=>{ BUKAP.add(t+B.kode); B.sub.forEach(Sb=>BUKAP.add(t+Sb.key)); })); gambarRekap(); };
+  const bukaSemua=()=>{ D.bid.forEach(B=>{ BUKAP.add("A:"+B.kode); B.sub.forEach(Sb=>BUKAP.add("A:"+Sb.key)); }); gambarRekap(); };
   const tutupSemua=()=>{ BUKAP.clear(); gambarRekap(); };
 
   wrap.appendChild(el("div",{class:"note info",style:"margin:12px"},
     "Pagu disusun berlapis: Bidang \u203A Sub kegiatan \u203A Kode rekening. Klik \u25B6 untuk membuka. Isi pagu langsung di kolom berlatar krem pada tingkat kode rekening; jumlah sub kegiatan, bidang, dan total terhitung otomatis. Tersimpan otomatis di laptop ini. Realisasi mengikuti saringan di atas (periode, jenis transaksi, bidang, pencarian), jadi pilih periode yang sama dengan masa pagu agar sisa bermakna."));
-  const lama=P.allLama||{}, nLama=Object.keys(lama).length;
-  if(nLama) wrap.appendChild(el("div",{class:"note",style:"margin:0 12px 12px"},
-    "Ada "+nLama+" pagu keseluruhan versi lama (per kode rekening saja) yang belum bisa dipetakan ke satu sub kegiatan, jadi tidak dihitung: "+
-    Object.keys(lama).map(k=>k+" = "+rp(lama[k])).join("; ")+". Isi ulang di sub kegiatan yang tepat, lalu ",
-    el("button",{class:"btn sm ghost",onclick:()=>{ delete P.allLama; Store.save(DB); gambarRekap(); }},"hapus catatan ini")));
   wrap.appendChild(el("div",{class:"rowactions",style:"padding:0 12px 12px"},
     el("button",{class:"btn sm",onclick:bukaDlgRek},"+ Tambah sub kegiatan / kode rekening"),
     el("button",{class:"btn sm ghost",onclick:bukaSemua},"Buka semua"),
     el("button",{class:"btn sm ghost",onclick:tutupSemua},"Tutup semua"),
-    el("button",{class:"btn sm ghost",onclick:ubahNamaPagu},"Ubah nama kolom pagu"),
-    el("button",{class:"btn sm ghost",onclick:isiKeseluruhanDariBidang},"Isi pagu keseluruhan dari jumlah pagu bidang")));
-  wrap.appendChild(el("div",{class:"band"},bBid.node,bAll.node,bReal.node,bSisa.node));
+    el("button",{class:"btn sm ghost",onclick:ubahNamaPagu},"Ubah nama kolom pagu")));
+  wrap.appendChild(el("div",{class:"band"},bBid.node,bReal.node,bSisa.node));
 
   function inputPagu(ambil,simpan,label){
     const i=el("input",{type:"text",inputmode:"decimal",class:"pg-in",placeholder:"0","aria-label":label});
@@ -1629,26 +1606,22 @@ function gambarPagu(rows,wrap){
     return i;
   }
   const setBid=key=>v=>{ if(v) P.bid[key]=v; else delete P.bid[key]; };
-  const setAll=key=>v=>{ if(v) P.all[key]=v; else delete P.all[key]; };
   const setSisa=(td,v)=>{ td.textContent=rp(v); td.classList.toggle("neg",v<0); };
   const td=cls=>el("td",{class:"r num"+(cls?" "+cls:"")});
   const uiA=()=>({p:td(),r:td(),s:td(),pc:td("muted")});
-  const uiB=()=>({a:td(),j:td(),sel:td(),r:td(),s:td()});
   const cA=u=>[u.p,u.r,u.s,u.pc];
-  const cB=u=>[u.a,u.j,u.sel,u.r,u.s];
 
   // sel angka untuk semua simpul disiapkan dulu, agar hitung() bisa mengisi walau simpul sedang tertutup
-  D.bid.forEach(B=>{ B.uA=uiA(); B.uB=uiB(); B.sub.forEach(Sb=>{ Sb.uA=uiA(); Sb.uB=uiB(); Sb.rek.forEach(R=>{ R.uA=uiA(); R.uB=uiB(); }); }); });
+  D.bid.forEach(B=>{ B.uA=uiA(); B.sub.forEach(Sb=>{ Sb.uA=uiA(); Sb.rek.forEach(R=>{ R.uA=uiA(); }); }); });
 
   const hapusRek=(B,Sb,R)=> R.bisaHapus? el("button",{class:"x-btn",title:"Hapus kode rekening tambahan ini",
     "aria-label":"Hapus "+R.kode,onclick:()=>{
       if(!confirm("Hapus kode rekening "+R.kode+" dari sub kegiatan "+Sb.kode+" ("+namaBidang(B.kode)+") beserta pagunya?")) return;
-      delete P.bid[R.key]; delete P.all[R.key]; delete P.extra[R.key]; Store.save(DB); gambarRekap();
+      delete P.bid[R.key]; delete P.extra[R.key]; Store.save(DB); gambarRekap();
     }},"\u00D7") : "";
   const labBid=(B,id)=>el("td",{colspan:"2"},twist(id),el("span",{class:"kode"},B.kode===TANPA?"\u2014":B.kode)," ",namaBidang(B.kode));
   const labSub=(Sb,id)=>el("td",{class:"pad1",colspan:"2"},twist(id),el("span",{class:"kode"},Sb.kode)," ",Sb.nama);
 
-  /* ---- Tabel A: pagu per bidang › sub kegiatan › kode rekening ---- */
   wrap.appendChild(el("h3",{class:"pg-h"},"Pagu per bidang, sub kegiatan, dan kode rekening"));
   const tbA=el("tbody");
   const gu=uiA();
@@ -1680,35 +1653,6 @@ function gambarPagu(rows,wrap){
       el("p",{},"Unggah file realisasi, atau klik \u201C+ Tambah sub kegiatan / kode rekening\u201D untuk memasukkan secara manual.")));
   }
 
-  /* ---- Tabel B: pagu keseluruhan per bidang › sub kegiatan › kode rekening ---- */
-  const tbB=el("tbody"), tu=uiB();
-  D.bid.forEach(B=>{
-    const idB="B:"+B.kode;
-    tbB.appendChild(el("tr",{class:"lv-bidang"},labBid(B,idB),...cB(B.uB)));
-    if(!buka(idB)) return;
-    B.sub.forEach(Sb=>{
-      const idS="B:"+Sb.key;
-      tbB.appendChild(el("tr",{class:"lv-sub"},labSub(Sb,idS),...cB(Sb.uB)));
-      if(!buka(idS)) return;
-      Sb.rek.forEach(R=>{
-        tbB.appendChild(el("tr",{class:"lv-rek"},
-          el("td",{class:"pad2"},el("span",{class:"kode"},R.kode)," ",hapusRek(B,Sb,R)),
-          el("td",{},R.nama),
-          el("td",{class:"r"},inputPagu(()=>P.all[R.key]||0,setAll(R.key),P.nAll+" "+R.kode)),
-          R.uB.j,R.uB.sel,R.uB.r,R.uB.s));
-      });
-    });
-  });
-  if(D.bid.length){
-    wrap.appendChild(el("h3",{class:"pg-h",style:"margin-top:10px"},"Pagu keseluruhan, per bidang, sub kegiatan, dan kode rekening"));
-    wrap.appendChild(el("p",{class:"muted",style:"margin:0;padding:0 14px 8px"},"Sisa = pagu keseluruhan \u2212 realisasi. Pada baris yang pagu keseluruhannya belum diisi, sisa dihitung dari pagu bidang."));
-    tbB.appendChild(el("tr",{class:"lv-total"},el("td",{colspan:"2"},"Total"),...cB(tu)));
-    wrap.appendChild(el("table",{},el("thead",{},el("tr",{},
-      el("th",{},"Bidang \u203A Sub kegiatan \u203A Kode rekening"),el("th",{},"Nama"),el("th",{class:"r"},P.nAll),
-      el("th",{class:"r"},"Jumlah pagu bidang"),el("th",{class:"r"},"Selisih (keseluruhan \u2212 bidang)"),
-      el("th",{class:"r"},"Realisasi"),el("th",{class:"r"},"Sisa"))),tbB));
-  }
-
   function hitung(){
     const G=hitungPagu(D);
     const isiA=(u,n,daun)=>{
@@ -1717,22 +1661,16 @@ function gambarPagu(rows,wrap){
       u.r.textContent=rp(n.real); setSisa(u.s,t-n.real);
       u.pc.textContent=t? (n.real/t*100).toFixed(1)+"%":"\u2014";
     };
-    const isiB=(u,n,daun)=>{
-      const j=n.p;
-      if(!daun) u.a.textContent=rp(n.all);
-      u.j.textContent=rp(j); setSisa(u.sel,n.all-j); u.r.textContent=rp(n.real); setSisa(u.s,n.eff-n.real);
-    };
     D.bid.forEach(B=>{
-      isiA(B.uA,B,false); isiB(B.uB,B,false);
+      isiA(B.uA,B,false);
       B.sub.forEach(Sb=>{
-        isiA(Sb.uA,Sb,false); isiB(Sb.uB,Sb,false);
-        Sb.rek.forEach(R=>{ isiA(R.uA,R,true); isiB(R.uB,R,true); });
+        isiA(Sb.uA,Sb,false);
+        Sb.rek.forEach(R=>isiA(R.uA,R,true));
       });
     });
-    isiA(gu,G,false); isiB(tu,G,false);
+    isiA(gu,G,false);
     const gt=G.p;
     bBid.v.textContent=rp(gt);
-    bAll.v.textContent=rp(G.all);
     bReal.v.textContent=rp(rows.reduce((x,r)=>x+r[F.NILAI],0));
     bSisa.v.classList.toggle("neg",gt-G.real<0); bSisa.v.textContent=rp(gt-G.real);
   }
@@ -1745,7 +1683,7 @@ function isiDaftarSubDlg(){
   const subs={};
   DB.rows.forEach(r=>{ if(S(r[F.BID])===b){ const s=S(r[F.KSUB])||TSUB; if(!subs[s]) subs[s]=S(r[F.NSUB]); } });
   const P=PM();
-  [P.bid,P.all,P.extra].forEach(o=>Object.keys(o).forEach(key=>{
+  [P.bid,P.extra].forEach(o=>Object.keys(o).forEach(key=>{
     const [kb,s]=pecahKunci(key); if(kb===b && !(s in subs)) subs[s]=P.subNama[s]||"";
   }));
   Object.keys(subs).sort(cmpKode).forEach(s=>dl.appendChild(el("option",{value:s},subs[s]||"")));
@@ -1775,25 +1713,15 @@ $("#rekSave").onclick=async()=>{
   const P=PM(), key=b+"|"+s+"|"+k;
   if(!(key in P.extra)) P.extra[key]=n; else if(n) P.extra[key]=n;
   if(sn) P.subNama[s]=sn;
-  ["A:","B:"].forEach(t=>{ BUKAP.add(t+b); BUKAP.add(t+b+"|"+s); });
+  BUKAP.add("A:"+b); BUKAP.add("A:"+b+"|"+s);
   await Store.save(DB); $("#dlgRek").close(); gambarRekap();
   toast("Kode rekening "+k+" ditambahkan ke sub kegiatan "+s+" ("+namaBidang(b)+").");
 };
 function ubahNamaPagu(){
   const P=PM();
-  const a=prompt("Nama kolom pagu (per bidang):",P.n1); if(a===null) return;
-  const c=prompt("Nama kolom pagu keseluruhan:",P.nAll); if(c===null) return;
-  P.n1=a.trim()||"Pagu"; P.nAll=c.trim()||"Pagu Keseluruhan";
+  const a=prompt("Nama kolom pagu:",P.n1); if(a===null) return;
+  P.n1=a.trim()||"Pagu";
   Store.save(DB); gambarRekap();
-}
-function isiKeseluruhanDariBidang(){
-  const P=PM(); let n=0;
-  Object.keys(P.bid).forEach(key=>{
-    const t=P.bid[key]||0;
-    if(t && !P.all[key]){ P.all[key]=t; n++; }
-  });
-  if(!n){ toast("Tidak ada kode rekening kosong yang bisa diisi.",true); return; }
-  Store.save(DB); gambarRekap(); toast(n+" baris pagu keseluruhan diisi dari jumlah pagu bidang. Ubah manual bila perlu.");
 }
 function lembarPagu(rows){
   const P=PM(), D=susunPaguManual(rows), G=hitungPagu(D);
@@ -1814,20 +1742,7 @@ function lembarPagu(rows){
   const w1=XLSX.utils.aoa_to_sheet(a);
   w1["!cols"]=[{wch:14},{wch:30},{wch:20},{wch:40},{wch:22},{wch:44},{wch:18},{wch:18},{wch:18}];
 
-  const b=[["PAGU KESELURUHAN PER BIDANG, SUB KEGIATAN, DAN KODE REKENING"],[judulKonteks()],ttl[1],[],
-    ["Tingkat","Bidang","Kode sub kegiatan","Nama sub kegiatan","Kode rekening","Nama rekening",P.nAll,"Jumlah pagu bidang","Selisih (keseluruhan - bidang)","Realisasi","Sisa"]];
-  const bb=(h,n)=>h.concat([n.all,n.p,n.all-n.p,n.real,n.eff-n.real]);
-  D.bid.forEach(B=>{
-    b.push(bb(bar("Bidang",B),B));
-    B.sub.forEach(Sb=>{
-      b.push(bb(bar("Sub kegiatan",B,Sb),Sb));
-      Sb.rek.forEach(R=>b.push(bb(bar("Rekening",B,Sb,R),R)));
-    });
-  });
-  b.push(bb(["TOTAL","","","","",""],G));
-  const w2=XLSX.utils.aoa_to_sheet(b);
-  w2["!cols"]=[{wch:14},{wch:30},{wch:20},{wch:40},{wch:22},{wch:44},{wch:20},{wch:20},{wch:24},{wch:18},{wch:18}];
-  return [w1,w2];
+  return w1;
 }
 
 /* ============================================================
