@@ -303,6 +303,14 @@ kbd{
 .files-foot{padding:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
 .files-foot .tbtn{justify-content:center;border:1px solid var(--line)}
 .files-foot .tbtn.primary{border-color:var(--stamp)}
+.dest{border:1px solid var(--line);background:#fff;border-radius:7px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.dest-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.dest-label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.dest .tbtn{padding:3px 9px;font-size:11.5px;border:1px solid var(--line)}
+.dest-name{font-family:var(--mono);font-size:11px;color:#0369a1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dest-name.none{color:var(--muted)}
+.dest-name.err{color:#dc2626;white-space:normal;font-size:10.5px}
+.dest input[type=text]{padding:5px 7px;font-family:var(--mono);font-size:11.5px}
 #drop-overlay{
   position:fixed;inset:10px;z-index:150;display:none;align-items:center;justify-content:center;
   background:rgba(14,165,233,.14);border:3px dashed var(--stamp);border-radius:14px;pointer-events:none;
@@ -355,7 +363,16 @@ kbd{
       </div>
       <div class="files-list" id="file-list"></div>
       <div class="files-foot">
+        <div class="dest">
+          <div class="dest-row"><span class="dest-label">Folder tujuan</span><button class="tbtn" id="btn-dest" title="Pilih folder tujuan simpan">Pilih…</button></div>
+          <div id="dest-name" class="dest-name">belum dipilih</div>
+          <div class="small-note" style="margin:0">Pilih <b>subfolder</b> (mis. <i>01 - Work</i> atau buat folder baru), bukan Documents / Downloads / Desktop langsung. Klik nama folder sekali lalu <i>Select Folder</i>.</div>
+          <input type="text" id="dest-pattern" value="{nama}-edit" title="Pola: {nama} {n} {tanggal} {jam}" placeholder="{nama}-edit">
+          <label class="chk" title="Nama file dibuat acak supaya tidak gagal karena nama. Matikan untuk memakai pola nama di atas."><input type="checkbox" id="dest-random" checked style="accent-color:var(--stamp)"> Nama acak otomatis</label>
+          <label class="chk"><input type="checkbox" id="dest-overwrite" checked style="accent-color:var(--stamp)"> Timpa jika nama sama</label>
+        </div>
         <label class="chk" title="PDF yang punya lebih dari 1 halaman otomatis dijadikan satu file per halaman saat dimasukkan"><input type="checkbox" id="auto-split" checked style="accent-color:var(--stamp)"> Pecah PDF multi-halaman otomatis</label>
+        <label class="chk" title="Semua berkas yang ditandai digabung berurutan menjadi satu file PDF. Matikan untuk menyimpan satu file per berkas."><input type="checkbox" id="save-merge" checked style="accent-color:var(--stamp)"> Gabungkan jadi 1 PDF</label>
         <button class="tbtn primary" id="btn-save-marked" disabled>Simpan ditandai (0)</button>
         <button class="tbtn" id="btn-remove-marked" disabled>Keluarkan dari daftar</button>
         <div class="small-note">Klik nama untuk membuka &amp; mengedit. <kbd>Shift</kbd>+klik kotak = tandai rentang.</div>
@@ -404,6 +421,7 @@ kbd{
     <span id="status-hint">Pilih alat di kiri untuk mulai menambahkan objek.</span>
     <div class="spacer" style="flex:1"></div>
     <span id="status-coords"></span>
+    <span style="color:var(--muted);opacity:.7" title="Versi file ini">v7 · gabung-1-pdf</span>
   </div>
 </div>
 
@@ -1183,7 +1201,7 @@ function toHex(c){
    per page. Falls back to full-page flattening only if the
    source PDF can't be edited directly (e.g. unusual encoding).
 ============================================================ */
-document.getElementById('btn-export').addEventListener('click', exportPdf);
+document.getElementById('btn-export').addEventListener('click', (e)=>exportPdf(e));
 
 function hexToRgb01(hex){
   if(!hex || hex[0]!=='#'){ hex='#000000'; }
@@ -1229,8 +1247,25 @@ async function saveBytes(bytes,name,dir){
 }
 const safeTxt=(f,t)=>[...t].map(ch=>{ try{ f.encodeText(ch); return ch; }catch(e){ return '?'; } }).join('');
 
-async function exportPdf(){
+async function exportPdf(ev){
   if(!pdfDoc) return;
+  // Mode cepat: simpan langsung ke folder tujuan tanpa dialog (Shift+klik = mode lama dengan pilihan nama & rentang halaman)
+  if(!(ev&&ev.shiftKey)){
+    const dir=await ensureDest();
+    if(!dir&&destFail==='cancel'&&destDir) return toast('Export dibatalkan');
+    saveCurrentPageSilently();
+    const keep=new Set([...Array(numPages)].map((_,i)=>i+1).filter(n=>!deletedPages.has(n)));
+    if(!keep.size){ toast('Tidak ada halaman yang tersisa'); return; }
+    toast('Menyimpan…');
+    try{
+      const bytes=await buildPdf({bytes:originalBytes,doc:pdfDoc,states:pageStates,keep,crops:cropBoxes,dimsOf:getPageDims});
+      const name0=await freeName(dir,pickName(destPattern.value.trim()||'{nama}-edit',1,fileLabel),new Set());
+      const name=await writeOut(dir,bytes,name0);
+      const d=docs.find(x=>x.id===activeId); if(d){ d.saved=true; renderFileList(); }
+      toast(dir?`Tersimpan: ${name} di folder "${dir.name}"`:`Diunduh: ${name} (folder Download)`);
+    }catch(err){ console.error(err); toast('Gagal menyimpan: '+err.message); }
+    return;
+  }
   saveCurrentPageSilently();
   const pat=prompt('Nama file. Pola: {nama} {tanggal} {jam}', '{nama}-edit'); if(pat===null) return;
   const rg=prompt('Rentang halaman (mis. 1-3,5). Kosongkan = semua:',''); if(rg===null) return;
@@ -1460,7 +1495,7 @@ document.getElementById('btn-batch').addEventListener('click',async()=>{
     const all=confirm('Terapkan objek ke SEMUA halaman tiap PDF? (Batal = hanya halaman 1)');
     const c0=parseInt(prompt('Nomor awal untuk {n}:','1'))||1;
     const pat=prompt('Pola nama file: {nama} {n} {tanggal} {jam}','{nama}-edit'); if(pat===null) return;
-    let dir=null; if(window.showDirectoryPicker){ try{ dir=await showDirectoryPicker({mode:'readwrite'}); }catch(e){} }
+    let dir=null; try{ dir=await ensureDest(); }catch(e){}
     for(const [i,f] of fs.entries()){
       toast(`Memproses ${i+1}/${fs.length}: ${f.name}`);
       try{
@@ -1469,7 +1504,7 @@ document.getElementById('btn-batch').addEventListener('click',async()=>{
         const js=JSON.stringify(T), st={}; for(let n=1;n<=(all?doc.numPages:1);n++) st[n]=js;
         const out=await buildPdf({bytes,doc,states:st,keep:new Set([...Array(doc.numPages)].map((_,k)=>k+1)),crops:{},
           dimsOf:async n=>{ const v=(await doc.getPage(n)).getViewport({scale:1}); return {w:v.width,h:v.height}; }});
-        await saveBytes(out,fmtName(pat,c0+i,f.name.replace(/\.pdf$/i,'')),dir);
+        { const nm=pickName(pat,c0+i,f.name.replace(/\.pdf$/i,'')); await writeOut(dir,out,nm); }
       }catch(err){ console.error(err); toast('Gagal: '+f.name); }
     }
     toast('Batch selesai');
@@ -1485,6 +1520,94 @@ document.getElementById('btn-batch').addEventListener('click',async()=>{
   inp.onchange=()=>run([...inp.files]);
   inp.click();
 });
+
+/* ============================================================
+   FOLDER TUJUAN (diingat, simpan langsung tanpa dialog)
+============================================================ */
+let destDir=null;
+const destPattern=document.getElementById('dest-pattern'), destOver=document.getElementById('dest-overwrite');
+try{ destPattern.value=localStorage.getItem('pdfed.pattern')||'{nama}-edit'; destOver.checked=localStorage.getItem('pdfed.overwrite')!=='0'; }catch(e){}
+destPattern.addEventListener('change',()=>{ try{ localStorage.setItem('pdfed.pattern',destPattern.value); }catch(e){} });
+const destRandom=document.getElementById('dest-random');
+try{ destRandom.checked=localStorage.getItem('pdfed.random')!=='0'; }catch(e){}
+function syncRandomUI(){ destPattern.disabled=destRandom.checked; destPattern.style.opacity=destRandom.checked?.45:1; }
+destRandom.addEventListener('change',()=>{ try{ localStorage.setItem('pdfed.random',destRandom.checked?'1':'0'); }catch(e){} syncRandomUI(); });
+syncRandomUI();
+function randName(){
+  const d=new Date(), p=x=>String(x).padStart(2,'0'), r=Math.random().toString(36).slice(2,6).padEnd(4,'x');
+  return `pdf-${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${r}`;
+}
+function pickName(pat,n,nama){
+  if(destRandom.checked) return randName();
+  try{ const s=fmtName(pat,n,nama); if(s&&s.trim()) return s; }catch(e){}
+  return randName();
+}
+// tulis file; kalau nama bermasalah, otomatis coba lagi dengan nama acak
+async function writeOut(dir,bytes,name){
+  if(!dir){ await downloadNow(bytes,name); return name; }
+  try{ await saveBytes(bytes,name,dir); return name; }
+  catch(e){
+    console.error('Nama gagal, pakai nama acak',e);
+    const rn=randName()+'.pdf'; await saveBytes(bytes,rn,dir); return rn;
+  }
+}
+destOver.addEventListener('change',()=>{ try{ localStorage.setItem('pdfed.overwrite',destOver.checked?'1':'0'); }catch(e){} });
+const idb=(mode,fn)=>new Promise((res,rej)=>{
+  const o=indexedDB.open('pdfeditor',1);
+  o.onupgradeneeded=()=>o.result.createObjectStore('kv');
+  o.onerror=()=>rej(o.error);
+  o.onsuccess=()=>{ const t=o.result.transaction('kv',mode), r=fn(t.objectStore('kv')); t.oncomplete=()=>res(r.result); t.onerror=()=>rej(t.error); };
+});
+function updateDestUI(){
+  const el=document.getElementById('dest-name');
+  el.textContent=destDir?('📁 '+destDir.name):(window.showDirectoryPicker?'belum dipilih':'tidak didukung — file diunduh');
+  el.classList.toggle('none',!destDir);
+  document.getElementById('btn-dest').textContent=destDir?'Ganti…':'Pilih…';
+}
+(async()=>{ try{ destDir=await idb('readonly',s=>s.get('destDir'))||null; }catch(e){} updateDestUI(); })();
+let destFail=null;   // null | 'cancel' | 'error'
+function setDestStatus(msg){ const el=document.getElementById('dest-name'); el.textContent=msg; el.classList.remove('none'); el.classList.add('err'); el.title=msg; }
+async function pickDest(){
+  destFail=null;
+  if(!window.showDirectoryPicker){ destFail='error'; setDestStatus('⚠ browser tidak mendukung pilih folder'); return false; }
+  try{
+    destDir=await showDirectoryPicker({mode:'readwrite',id:'pdf-editor-dest'});
+    try{ await idb('readwrite',s=>s.put(destDir,'destDir')); }catch(e){}
+    document.getElementById('dest-name').classList.remove('err'); updateDestUI(); return true;
+  }catch(e){
+    if(e.name==='AbortError'){ destFail='cancel'; return false; }
+    destFail='error'; console.error(e);
+    setDestStatus('⚠ '+e.name+': '+e.message);
+    toast('Folder ditolak browser ('+e.name+'). Pilih SUBFOLDER (bukan Downloads/Documents/Desktop langsung) dan buka file ini langsung di Chrome/Edge.');
+    return false;
+  }
+}
+// Harus dipanggil langsung dari klik. Sekali "Izinkan" per sesi browser, setelah itu tanpa tanya.
+async function ensureDest(){
+  destFail=null;
+  if(!window.showDirectoryPicker){ destFail='error'; return null; }
+  if(!destDir){ if(!(await pickDest())) return null; }
+  try{
+    let p=await destDir.queryPermission({mode:'readwrite'});
+    if(p!=='granted') p=await destDir.requestPermission({mode:'readwrite'});
+    if(p==='granted'){ document.getElementById('dest-name').classList.remove('err'); updateDestUI(); return destDir; }
+    destFail='cancel'; toast('Izin ke folder tidak diberikan'); return null;
+  }catch(e){ console.error(e); destFail='error'; setDestStatus('⚠ '+e.name+': '+e.message); return null; }
+}
+async function downloadNow(bytes,name){
+  name=name.replace(/[\\/:*?"<>|]/g,'_'); if(!/\.pdf$/i.test(name)) name+='.pdf';
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})), a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000); await new Promise(r=>setTimeout(r,350));
+}
+document.getElementById('btn-dest').addEventListener('click',pickDest);
+async function freeName(dir,nm,used){
+  nm=nm.replace(/[\\/:*?"<>|]/g,'_'); if(!/\.pdf$/i.test(nm)) nm+='.pdf';
+  const base=nm.replace(/\.pdf$/i,''); let out=nm,k=2;
+  const exists=async n=>{ try{ await dir.getFileHandle(n); return true; }catch(e){ return false; } };
+  while(used.has(out.toLowerCase())||(!destOver.checked&&dir&&await exists(out))) out=`${base} (${k++}).pdf`;
+  used.add(out.toLowerCase()); return out;
+}
 
 /* ============================================================
    WORKSPACE: banyak PDF, drag & drop, tandai & simpan langsung
@@ -1653,6 +1776,9 @@ function renderFileList(){
 filesAll.addEventListener('click',()=>{ docs.forEach(d=>{ d.checked=!d.bad&&filesAll.checked; }); renderFileList(); });
 document.getElementById('btn-files').addEventListener('click',()=>{ filesOpen=!filesOpen; renderFileList(); });
 btnRemoveMarked.addEventListener('click',()=>removeDocs(docs.filter(d=>d.checked).map(d=>d.id)));
+const saveMergeEl=document.getElementById('save-merge');
+try{ saveMergeEl.checked=localStorage.getItem('pdfed.merge')!=='0'; }catch(e){}
+saveMergeEl.addEventListener('change',()=>{ try{ localStorage.setItem('pdfed.merge',saveMergeEl.checked?'1':'0'); }catch(e){} });
 
 async function removeDocs(ids){
   if(!ids.length) return;
@@ -1687,25 +1813,16 @@ async function saveMarked(){
   if(saving) return;
   const sel=docs.filter(d=>d.checked&&!d.bad);
   if(!sel.length) return toast('Tandai dulu PDF yang ingin disimpan');
+  const dir=await ensureDest();                       // langsung dari klik; tanpa konfirmasi tambahan
+  if(!dir&&destFail==='cancel'&&destDir) return toast('Simpan dibatalkan');
+  if(!dir) toast('Folder tujuan tidak bisa dipakai — file diunduh langsung ke folder Download');
   stashActive();
-  // folder dipilih lebih dulu (butuh klik langsung dari pengguna)
-  let dir=null;
-  if(window.showDirectoryPicker){
-    try{ dir=await showDirectoryPicker({mode:'readwrite'}); }
-    catch(e){ if(e.name==='AbortError') return toast('Simpan dibatalkan'); toast('Folder tidak bisa dipilih — file akan diunduh satu per satu'); }
-  }
-  const pat=prompt('Pola nama file. Pola: {nama} {n} {tanggal} {jam}\n(Isi {nama} saja untuk memakai nama asli.)','{nama}-edit'); if(pat===null) return;
-  if(dir&&!confirm(`Simpan ${sel.length} PDF ke folder "${dir.name}"?\nFile bernama sama di folder itu akan ditimpa.`)) return;
+  const pat=destPattern.value.trim()||'{nama}-edit';
   saving=true; renderFileList();
   const used=new Set(); let ok=0, fail=0;
-  const uniq=nm=>{
-    nm=nm.replace(/[\\/:*?"<>|]/g,'_'); if(!/\.pdf$/i.test(nm)) nm+='.pdf';
-    const base=nm.replace(/\.pdf$/i,''); let out=nm, k=2;
-    while(used.has(out.toLowerCase())) out=`${base} (${k++}).pdf`;
-    used.add(out.toLowerCase()); return out;
-  };
+  const merge=saveMergeEl.checked&&sel.length>1, outs=[];
   for(const [i,d] of sel.entries()){
-    toast(`Menyimpan ${i+1}/${sel.length}: ${d.name}.pdf`);
+    toast(`${merge?'Menyiapkan':'Menyimpan'} ${i+1}/${sel.length}: ${d.name}.pdf`);
     try{
       const doc=await pdfjsLib.getDocument({data:d.bytes.slice(0)}).promise;
       const np=doc.numPages;
@@ -1714,18 +1831,28 @@ async function saveMarked(){
       const out=await buildPdf({bytes:d.bytes,doc,states:d.pageStates,keep,crops:d.crops,
         dimsOf:async n=>{ const v=(await doc.getPage(n)).getViewport({scale:1}); return {w:v.width,h:v.height}; }});
       doc.destroy&&doc.destroy();
-      const name=uniq(fmtName(pat,i+1,d.name));
-      if(dir) await saveBytes(out,name,dir);
-      else{
-        const url=URL.createObjectURL(new Blob([out],{type:'application/pdf'})), a=document.createElement('a');
-        a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),4000); await new Promise(r=>setTimeout(r,350));
-      }
+      if(merge){ outs.push({d,out}); continue; }
+      const name=await freeName(dir,pickName(pat,i+1,d.name),used);
+      await writeOut(dir,out,name);
       d.saved=true; ok++;
     }catch(err){ console.error(err); fail++; toast('Gagal: '+d.name+'.pdf — '+err.message); await new Promise(r=>setTimeout(r,900)); }
   }
+  let mergedName=null;
+  if(merge&&outs.length){
+    try{
+      toast(`Menggabungkan ${outs.length} berkas jadi 1 PDF…`);
+      const m=await PDFDocument.create();
+      for(const o of outs){ const s=await PDFDocument.load(o.out); (await m.copyPages(s,s.getPageIndices())).forEach(pg=>m.addPage(pg)); }
+      const mb=await m.save();
+      const base=outs[0].d.name.replace(/-hal-\d+$/,'');
+      const nm=await freeName(dir,pickName(destPattern.value.trim()||'{nama}-edit',1,base),used);
+      mergedName=await writeOut(dir,mb,nm);
+      outs.forEach(o=>o.d.saved=true); ok=outs.length;
+    }catch(err){ console.error(err); fail+=outs.length; toast('Gagal menggabungkan: '+err.message); await new Promise(r=>setTimeout(r,900)); }
+  }
   saving=false; renderFileList();
-  toast(`Selesai: ${ok} tersimpan`+(fail?`, ${fail} gagal`:'')+(dir?` di folder "${dir.name}"`:''));
+  toast(mergedName?`Selesai: ${ok} berkas digabung jadi 1 PDF (${mergedName})`+(dir?` di folder "${dir.name}"`:''):
+    `Selesai: ${ok} tersimpan`+(fail?`, ${fail} gagal`:'')+(dir?` di folder "${dir.name}"`:''));
 }
 
 /* ---- DRAG & DROP (banyak file / folder) ---- */
