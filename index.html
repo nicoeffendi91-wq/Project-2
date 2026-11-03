@@ -296,7 +296,7 @@ td.neg{color:var(--danger);font-weight:600}
         <button class="btn sm ghost" id="btnExpand">Buka semua</button>
         <span class="hint" id="lraInfo"></span>
         <button class="btn sm ghost" id="btnLraStruk">Struktur LRA…</button>
-        <button class="btn sm ghost" id="btnPagu">Muat pagu…</button>
+        <button class="btn sm ghost" id="btnPagu" title="Isi Pagu manual dari berkas Excel pagu (kolom Total)">Muat pagu…</button>
         <button class="btn sm" id="btnLra" title="Realisasi Operasi dan Modal, diisi ke struktur berkas LRA">Unduh LRA (Operasi–Modal)</button>
         <button class="btn sm" id="btnXlsx">Unduh Excel</button>
       </div>
@@ -1348,12 +1348,21 @@ function bacaPagu(buf,namaFile){
   const rows=[...agg].map(([k,v])=>{ const q=k.split("\u0001"); return [q[0],q[1],q[2],v]; });
   return {nama:namaFile, n, tanpa, dup, total, perbaikiX:x, kolom:kd(aoa[0][iTot])+" (kolom "+XLSX.utils.encode_col(iTot)+")", rows, unit:Object.keys(unit)};
 }
+// Pagu LRA = Pagu manual (satu sumber). Bidang digabung: kombinasi sub kegiatan + rekening yang sama dijumlahkan.
 function paguTersaring(){
-  if(!DB.pagu) return [];
-  return DB.pagu.rows.filter(([u])=>{
-    if(!BID_PILIH.size) return true;
-    const k=kodeBidangUnit(u); return k && BID_PILIH.has(k);
-  }).map(([u,sub,rek,v])=>[sub,rek,v]);
+  const P=PM(), hasil=[];
+  Object.keys(P.bid).forEach(key=>{
+    const [b,sub,rek]=pecahKunci(key);
+    if(BID_PILIH.size && !BID_PILIH.has(b)) return;
+    if(P.bid[key]) hasil.push([sub,rek,P.bid[key]]);
+  });
+  return hasil;
+}
+// Pagu dari berkas (versi lama, disimpan di DB.pagu) dipindah sekali ke Pagu manual.
+function pindahkanPaguBerkas(P){
+  if(!DB.pagu || !DB.pagu.rows) return;
+  DB.pagu.rows.forEach(([u,sub,rek,v])=>{ const key=(kodeBidangUnit(u)||TANPA)+"|"+sub+"|"+rek; if(P.bid[key]===undefined) P.bid[key]=v; });
+  DB.pagu=null;
 }
 // Realisasi LRA bersifat kumulatif: semua bulan sampai dengan periode yang dipilih.
 function dataLra(){
@@ -1422,7 +1431,7 @@ function susunLra(data,pagu){
 function gambarLraInfo(){
   const n=$("#lraInfo"); if(!n) return;
   const bag=[DB.lra ? "Struktur: "+DB.lra.nama : "Struktur LRA belum dimuat",
-             DB.pagu ? "Pagu: "+DB.pagu.nama : "pagu belum dimuat"];
+             Object.keys(PM().bid).length ? "Pagu manual: "+Object.keys(PM().bid).length+" kode rekening" : "pagu belum diisi"];
   n.textContent=bag.join(" · ");
 }
 
@@ -1435,7 +1444,7 @@ function unduhLra(){
   const p=$("#fPeriode").value;
   a.push([(p? "Realisasi s.d. "+labelPeriode(p) : "Realisasi seluruh periode")+" · "+
           (BID_PILIH.size? [...BID_PILIH].sort().map(k=>namaBidang(k)).join(" + ") : "Semua bidang")+
-          (DB.pagu? " · Pagu: kolom "+DB.pagu.kolom : " · Pagu belum dimuat")]);
+          (pagu.length? " · Pagu: Pagu manual ("+pagu.length+" kode rekening)" : " · Pagu belum diisi")]);
   const h0=a.length;
   a.push(["Kode",null,null,null,L.hdrUraian,"Kelompok Belanja"]);
   a.push([null,null,null,null,null,"Operasi",null,"Modal"]);
@@ -1470,13 +1479,9 @@ function unduhLra(){
   }
   XLSX.writeFile(wb,namaBerkas("xlsx").replace("Rekap-Realisasi","LRA-Operasi-Modal"));
   let pesan="LRA diunduh.";
-  if(!DB.pagu) pesan+=" Pagu belum dimuat, kolom Anggaran kosong.";
+  if(!pagu.length) pesan+=" Pagu belum diisi (tab Pagu manual), kolom Anggaran kosong.";
   if(H.tidak.length) pesan+=" "+H.tidak.length+" baris tidak cocok dengan struktur (lihat sheet Tidak Cocok).";
   if(H.abaikan.n) pesan+=" "+H.abaikan.n+" baris bukan Operasi/Modal diabaikan.";
-  if(DB.pagu && BID_PILIH.size){
-    const tak=DB.pagu.unit.filter(u=>!kodeBidangUnit(u));
-    if(tak.length) pesan+=" Unit tanpa bidang (tidak ikut saringan): "+tak.join(", ")+".";
-  }
   toast(pesan, H.tidak.length>0);
 }
 
@@ -1505,6 +1510,7 @@ function PM(){
     Object.keys(p.bid).forEach(k=>{ const a=p.bid[k]; if(Array.isArray(a)){ const t=(a[0]||0)+(a[1]||0); if(t) p.bid[k]=t; else delete p.bid[k]; } });
     delete p.n2; p.v=3;
   }
+  pindahkanPaguBerkas(p);
   return p;
 }
 /* Data lama berkunci "bidang|rek" dan "rek" dipindah ke kunci "bidang|sub|rek".
@@ -1747,20 +1753,13 @@ $("#rekSave").onclick=async()=>{
   toast("Kode rekening "+k+" ditambahkan ke sub kegiatan "+s+" ("+namaBidang(b)+").");
 };
 async function hapusSemuaPagu(){
-  const P=PM(), n=Object.keys(P.bid).length, adaFile=!!DB.pagu;
-  if(!n && !adaFile){ toast("Tidak ada pagu yang terisi.",true); return; }
-  let pesan="";
-  if(n){
-    const total=Object.values(P.bid).reduce((x,v)=>x+v,0);
-    if(!confirm("Hapus semua pagu yang terisi?\n\n\u2022 "+n+" kode rekening terisi (total "+rpFull(total)+")\n\nKode rekening tambahan tetap ada. Tindakan ini tidak bisa dibatalkan.")) return;
-    P.bid={}; pesan="Semua pagu yang terisi dihapus.";
-  }
-  if(adaFile && confirm("Hapus juga pagu dari berkas \""+DB.pagu.nama+"\" (yang dipakai di Unduh LRA)?")){
-    DB.pagu=null; pesan+=(pesan?" ":"")+"Pagu berkas juga dihapus.";
-  }
-  if(!pesan) return;
+  const P=PM(), n=Object.keys(P.bid).length;
+  if(!n){ toast("Tidak ada pagu yang terisi.",true); return; }
+  const total=Object.values(P.bid).reduce((x,v)=>x+v,0);
+  if(!confirm("Hapus semua pagu yang terisi?\n\n\u2022 "+n+" kode rekening terisi (total "+rpFull(total)+")\n\nPagu ini juga dipakai di Unduh LRA. Kode rekening tambahan tetap ada. Tindakan ini tidak bisa dibatalkan.")) return;
+  P.bid={}; DB.pagu=null;
   clearTimeout(tmrPagu);
-  await Store.save(DB); gambarLraInfo(); gambarRekap(); toast(pesan);
+  await Store.save(DB); gambarLraInfo(); gambarRekap(); toast("Semua pagu yang terisi dihapus.");
 }
 function ubahNamaPagu(){
   const P=PM();
@@ -1841,15 +1840,25 @@ $("#btnPagu").onclick=()=>$("#paguFile").click();
 $("#paguFile").onchange=async e=>{
   const f=e.target.files[0]; e.target.value=""; if(!f) return;
   try{
-    const P=bacaPagu(await f.arrayBuffer(),f.name);
-    DB.pagu=P; await Store.save(DB); gambarLraInfo();
-    const tak=P.unit.filter(u=>!kodeBidangUnit(u));
-    let pesan="Pagu dimuat dari "+P.kolom+": "+P.rows.length+" kombinasi unit/sub kegiatan/rekening, total "+Math.round(P.total).toLocaleString("id-ID")+".";
-    if(P.tanpa) pesan+=" "+P.tanpa+" dari "+P.n+" baris tidak punya Total.";
-    if(P.perbaikiX) pesan+=" "+P.perbaikiX+" kode X.XX diperbaiki dari kolom Program.";
-    if(P.dup) pesan+=" "+P.dup+" baris identik terdeteksi (tetap dihitung).";
-    if(tak.length) pesan+=" Unit belum terpetakan ke bidang: "+tak.join(", ")+".";
-    toast(pesan, P.tanpa>0||tak.length>0);
+    const B=bacaPagu(await f.arrayBuffer(),f.name), M=PM();
+    const baris=B.rows.map(([u,sub,rek,v])=>[(kodeBidangUnit(u)||TANPA)+"|"+sub+"|"+rek,sub,rek,v]);
+    const beda=baris.filter(([key,,,v])=>M.bid[key]!==undefined && M.bid[key]!==v).length;
+    if(beda && !confirm(beda+" kode rekening di Pagu manual sudah punya nilai berbeda dan akan diganti oleh nilai dari berkas. Lanjutkan?")) return;
+    const lra=DB.lra?DB.lra.rows:[], namaS={}, namaR={};
+    lra.forEach(([a,b,c,d,e])=>{ if(d) namaR[c+"|"+d]=e; else if(segs(c)>=6) namaS[c]=e; });
+    baris.forEach(([key,sub,rek,v])=>{
+      M.bid[key]=v;
+      if(namaS[sub] && !M.subNama[sub]) M.subNama[sub]=namaS[sub];
+      if(namaR[sub+"|"+rek] && M.extra[key]===undefined) M.extra[key]=namaR[sub+"|"+rek];
+    });
+    DB.pagu=null; await Store.save(DB); gambarLraInfo(); gambarRekap();
+    const tak=B.unit.filter(u=>!kodeBidangUnit(u));
+    let pesan="Pagu dimuat dari "+B.kolom+" ke Pagu manual: "+baris.length+" kode rekening, total "+Math.round(B.total).toLocaleString("id-ID")+".";
+    if(B.tanpa) pesan+=" "+B.tanpa+" dari "+B.n+" baris tidak punya Total.";
+    if(B.perbaikiX) pesan+=" "+B.perbaikiX+" kode X.XX diperbaiki dari kolom Program.";
+    if(B.dup) pesan+=" "+B.dup+" baris identik terdeteksi (tetap dihitung).";
+    if(tak.length) pesan+=" Unit belum terpetakan ke bidang, masuk \"tanpa bidang\": "+tak.join(", ")+".";
+    toast(pesan, B.tanpa>0||tak.length>0);
   }catch(err){ toast("Gagal membaca pagu: "+err.message,true); }
 };
 $("#lraFile").onchange=async e=>{
