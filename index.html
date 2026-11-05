@@ -332,6 +332,31 @@ td.neg{color:var(--danger);font-weight:600}
   </div>
 </dialog>
 
+<dialog id="dlgBaris" style="width:min(760px,95vw);max-width:none">
+  <div class="hd"><h2>Edit baris realisasi</h2></div>
+  <div class="bd">
+    <p class="muted" style="margin-top:0" id="ebAsal"></p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+      <div class="field"><label for="ebDoc">Nomor dokumen</label><input type="text" id="ebDoc"></div>
+      <div class="field"><label for="ebTx">Jenis transaksi</label><select id="ebTx"></select></div>
+      <div class="field"><label for="ebTgl">Tanggal (YYYY-MM-DD)</label><input type="text" id="ebTgl" placeholder="2026-09-15"></div>
+      <div class="field"><label for="ebPer">Bulan (periode)</label><input type="month" id="ebPer"></div>
+      <div class="field"><label for="ebBid">Bidang</label><select id="ebBid"></select></div>
+      <div class="field"><label for="ebNilai">Nilai realisasi (Rp)</label><input type="text" id="ebNilai" inputmode="decimal"></div>
+      <div class="field"><label for="ebKsub">Kode sub kegiatan</label><input type="text" id="ebKsub"></div>
+      <div class="field"><label for="ebNsub">Nama sub kegiatan</label><input type="text" id="ebNsub"></div>
+      <div class="field"><label for="ebKrek">Kode rekening</label><input type="text" id="ebKrek"></div>
+      <div class="field"><label for="ebNrek">Nama rekening</label><input type="text" id="ebNrek"></div>
+      <div class="field" style="grid-column:1/-1"><label for="ebKet">Keterangan</label><textarea id="ebKet" rows="4" style="width:100%"></textarea></div>
+    </div>
+  </div>
+  <div class="ft">
+    <button class="btn danger" id="ebHapus" style="margin-right:auto">Hapus baris</button>
+    <button class="btn ghost" id="ebBatal">Batal</button>
+    <button class="btn" id="ebSimpan">Simpan perubahan</button>
+  </div>
+</dialog>
+
 <dialog id="dlgRek">
   <div class="hd"><h2>Tambah sub kegiatan / kode rekening</h2></div>
   <div class="bd">
@@ -1063,15 +1088,70 @@ function gambarRincian(rows,wrap){
       el("td",{}, el("span",{class:"kode"},S(r[F.BID])===TANPA?"—":S(r[F.BID]))," ",namaBidang(S(r[F.BID]))),
       el("td",{},S(r[F.NSUB]),el("div",{class:"kode"},S(r[F.KSUB]))),
       el("td",{},S(r[F.NREK]),el("div",{class:"kode"},S(r[F.KREK]))),
-      el("td",{class:"r num"},rp(r[F.NILAI]))
+      el("td",{class:"r num"},rp(r[F.NILAI])),
+      el("td",{class:"r",style:"white-space:nowrap"},
+        el("button",{class:"btn sm ghost",onclick:()=>bukaEditBaris(r),title:"Ubah isi baris ini"},"Edit"),
+        " ",
+        el("button",{class:"btn sm danger",onclick:()=>hapusBaris(r),title:"Hapus baris ini dari database"},"Hapus"))
     ));
   }
   wrap.appendChild(el("table",{},
     el("thead",{},el("tr",{},el("th",{},"Tanggal"),el("th",{},"Bulan"),el("th",{},"Nomor dokumen"),el("th",{},"Jenis"),
-      el("th",{},"Bidang"),el("th",{},"Sub kegiatan"),el("th",{},"Rekening"),el("th",{class:"r"},"Nilai"))),
+      el("th",{},"Bidang"),el("th",{},"Sub kegiatan"),el("th",{},"Rekening"),el("th",{class:"r"},"Nilai"),el("th",{class:"r"},"Tindakan"))),
     tb));
   if(urut.length>batas) wrap.appendChild(el("div",{class:"note info",style:"margin:12px"},
-    "Menampilkan "+batas.toLocaleString("id-ID")+" dari "+urut.length.toLocaleString("id-ID")+" baris. Unduh Excel untuk melihat seluruhnya."));
+    "Menampilkan "+batas.toLocaleString("id-ID")+" dari "+urut.length.toLocaleString("id-ID")+" baris. Persempit dengan saringan atau pencarian untuk mengedit baris lain, atau Unduh Excel untuk melihat seluruhnya."));
+}
+
+/* ---------- edit / hapus satu baris realisasi ---------- */
+let BARIS_EDIT=null;
+function bukaEditBaris(r){
+  BARIS_EDIT=r;
+  const b=DB.batches.find(x=>x.id===r[F.BATCH]);
+  $("#ebAsal").textContent="Asal impor: "+(b?b.nama:"(tidak diketahui)")+". Perubahan langsung dipakai di rekap, pagu, dan Unduh LRA.";
+  $("#ebDoc").value=r[F.DOC]; $("#ebTgl").value=r[F.TGL]||""; $("#ebPer").value=S(r[F.PER])||"";
+  $("#ebKsub").value=S(r[F.KSUB]); $("#ebNsub").value=S(r[F.NSUB]);
+  $("#ebKrek").value=S(r[F.KREK]); $("#ebNrek").value=S(r[F.NREK]);
+  $("#ebNilai").value=String(r[F.NILAI]).replace(".",","); $("#ebKet").value=r[F.KET]||"";
+  const tx=$("#ebTx"); tx.innerHTML="";
+  [...new Set([...DB.rows.map(x=>S(x[F.TX])),"LS","UP","TU",S(r[F.TX])])].filter(Boolean).sort()
+    .forEach(k=>tx.appendChild(el("option",{value:k},k)));
+  tx.value=S(r[F.TX]);
+  const bd=$("#ebBid"); bd.innerHTML="";
+  bd.appendChild(el("option",{value:TANPA},"\u2014 tanpa bidang \u2014"));
+  [...new Set([...Object.keys(BIDANG_BAWAAN),...Object.keys(DB.bidangNama),...DB.rows.map(x=>S(x[F.BID])),S(r[F.BID])])]
+    .filter(k=>k&&k!==TANPA).sort().forEach(k=>bd.appendChild(el("option",{value:k},k+" "+namaBidang(k))));
+  bd.value=S(r[F.BID]);
+  $("#dlgBaris").showModal();
+}
+function sesuaikanBatch(id,dBaris,dNilai){
+  const b=DB.batches.find(x=>x.id===id); if(!b) return;
+  b.baris+=dBaris; b.nilai+=dNilai;
+  if(b.baris<=0) DB.batches=DB.batches.filter(x=>x.id!==id);      // impor yang barisnya habis ikut hilang
+}
+async function simpanEditBaris(){
+  const r=BARIS_EDIT; if(!r) return;
+  const doc=$("#ebDoc").value.trim(), tgl=$("#ebTgl").value.trim(), per=$("#ebPer").value.trim(), nilaiTeks=$("#ebNilai").value;
+  if(!doc){ toast("Nomor dokumen tidak boleh kosong.",true); return; }
+  if(!/\d/.test(nilaiTeks)){ toast("Isi nilai realisasi dengan angka.",true); return; }
+  if(tgl && !/^\d{4}-\d{2}-\d{2}$/.test(tgl)){ toast("Format tanggal harus YYYY-MM-DD, misalnya 2026-09-15.",true); return; }
+  const nilai=angka(nilaiTeks), lama=r[F.NILAI], bidLama=S(r[F.BID]), bidBaru=$("#ebBid").value;
+  r[F.DOC]=doc; r[F.TX]=intern($("#ebTx").value); r[F.TGL]=tgl; r[F.PER]=intern(per);
+  r[F.KSUB]=intern($("#ebKsub").value.trim()); r[F.NSUB]=intern($("#ebNsub").value.trim());
+  r[F.KREK]=intern($("#ebKrek").value.trim()); r[F.NREK]=intern($("#ebNrek").value.trim());
+  r[F.NILAI]=nilai; r[F.BID]=intern(bidBaru); r[F.KET]=$("#ebKet").value;
+  if(bidBaru!==bidLama) r[F.CARA]=intern("manual");
+  sesuaikanBatch(r[F.BATCH],0,nilai-lama);
+  BARIS_EDIT=null; $("#dlgBaris").close();
+  await Store.save(DB); render(); toast("Baris diperbarui.");
+}
+async function hapusBaris(r){
+  r=r||BARIS_EDIT; if(!r) return;
+  if(!confirm("Hapus baris ini dari database?\n\n"+r[F.DOC]+"\n"+S(r[F.KREK])+" \u00b7 "+rpFull(r[F.NILAI])+"\n\nTindakan ini tidak bisa dibatalkan.")) return;
+  const i=DB.rows.indexOf(r); if(i<0) return;
+  DB.rows.splice(i,1); sesuaikanBatch(r[F.BATCH],-1,-r[F.NILAI]);
+  BARIS_EDIT=null; if($("#dlgBaris").open) $("#dlgBaris").close();
+  await Store.save(DB); render(); toast("Baris dihapus.");
 }
 
 /* ---------- saringan ---------- */
@@ -1869,6 +1949,10 @@ $("#lraFile").onchange=async e=>{
     toast("Struktur LRA dimuat: "+DB.lra.rows.length+" baris.");
   }catch(err){ toast("Gagal membaca struktur: "+err.message,true); }
 };
+$("#ebSimpan").onclick=simpanEditBaris;
+$("#ebBatal").onclick=()=>{ BARIS_EDIT=null; $("#dlgBaris").close(); };
+$("#ebHapus").onclick=()=>hapusBaris();
+$("#ebTgl").oninput=()=>{ const t=$("#ebTgl").value.trim(); if(/^\d{4}-\d{2}-\d{2}$/.test(t)) $("#ebPer").value=t.slice(0,7); };
 $("#btnNamaBidang").onclick=bukaEditorBidang;
 $("#btnAturan").onclick=bukaEditorAturan;
 $("#aturanCancel").onclick=()=>$("#dlgAturan").close();
