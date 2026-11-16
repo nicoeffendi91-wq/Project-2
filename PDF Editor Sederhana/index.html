@@ -201,6 +201,11 @@ textarea{resize:vertical;min-height:56px;font-family:var(--sans)}
 input[type=color]{width:100%;height:30px;border:1px solid var(--line);border-radius:5px;background:#fff;padding:2px}
 input[type=range]{width:100%}
 .chk{display:flex;align-items:center;gap:7px;font-size:12px;color:#33475b}
+.swatches{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swatch{width:28px;height:28px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.swatch.active,.swatches input[type=color].active{box-shadow:0 0 0 2px #0ea5e9}
+.swatch-orig{width:auto;border-radius:14px;padding:0 10px;font-size:11px;background:#fff;color:#33475b;align-items:center;justify-content:center;display:none}
+.swatches input[type=color]{width:34px;height:28px;padding:1px;border-radius:6px;cursor:pointer}
 .btnrow{display:flex;gap:8px;margin-top:14px}
 .btnrow .tbtn{flex:1;justify-content:center;border:1px solid var(--line)}
 .small-note{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}
@@ -357,6 +362,7 @@ kbd{
     </select>
     <input type="number" id="rot-custom" step="any" value="" placeholder="° bebas" title="Sudut rotasi bebas dalam derajat. Positif = searah jarum jam, negatif = berlawanan. Contoh: 15 atau -7.5" style="width:78px;padding:6px 6px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;font-family:var(--sans)">
     <button class="tbtn" id="btn-rotc" title="Putar sesuai sudut yang diketik">Putar</button>
+    <button class="tbtn" id="btn-cropundo" style="display:none" title="Kembalikan halaman sebelum crop terakhir">Urungkan Crop</button>
     <button class="tbtn" id="btn-addpdf">+ Tambah PDF</button>
     <button class="tbtn" id="btn-batch" title="Terapkan objek halaman aktif ke banyak PDF">Batch</button>
     <button class="tbtn" id="btn-saveproj">Simpan Proyek</button>
@@ -503,6 +509,15 @@ kbd{
       <div class="field" style="margin-top:10px"><label>Atau teks kustom</label><input type="text" id="stamp-custom" placeholder="Contoh: SESUAI ASLI"></div>
       <div class="field"><label>Warna stempel</label><input type="color" id="stamp-color" value="#2563eb"></div>
     </div>
+    <div class="field" id="sig-color-row" style="margin-top:12px">
+      <label>Warna tanda tangan</label>
+      <div class="swatches" id="sig-swatches">
+        <button type="button" class="swatch" data-color="#111111" style="background:#111111" title="Hitam"></button>
+        <button type="button" class="swatch" data-color="#1d4ed8" style="background:#1d4ed8" title="Biru"></button>
+        <input type="color" id="sig-color-custom" value="#dc2626" title="Warna lain">
+        <button type="button" class="swatch swatch-orig" id="sig-sw-orig" data-color="original" title="Pakai warna asli gambar">Asli</button>
+      </div>
+    </div>
     <div class="btnrow">
       <button class="tbtn" id="sig-cancel">Batal</button>
       <button class="tbtn primary" id="sig-apply">Tambahkan ke Halaman</button>
@@ -625,7 +640,7 @@ async function loadPdf(buf){
   await buildThumbs();
   currentPage=1;
   await renderPage(1);
-  resetHistory();
+  updateUndoRedoButtons();
 }
 
 /* ============================================================
@@ -661,15 +676,16 @@ async function renderPage(n, alsoLoadFabric=true){
     suppressHistory = true;
     const json = pageStates[n];
     if(json){
-      await new Promise(res=>fabricCanvas.loadFromJSON(json, ()=>{
+      fabricCanvas.loadFromJSON(json, ()=>{
         fabricCanvas.forEachObject(o=> o.selectable = (currentTool==='select'));
         fabricCanvas.renderAll();
-        suppressHistory=false; res();
-      }));
+        suppressHistory=false;
+      });
     } else {
       fabricCanvas.clear();
       fabricCanvas.renderAll();
       suppressHistory=false;
+      pushHistory(true); // initial empty state for this page
     }
   }
   updateStatusPage();
@@ -678,7 +694,7 @@ async function renderPage(n, alsoLoadFabric=true){
 }
 
 function saveCurrentPageSilently(){
-  pageStates[currentPage] = JSON.stringify(fabricCanvas.toJSON(['selectable','redact']));
+  pageStates[currentPage] = JSON.stringify(fabricCanvas.toJSON(['selectable','redact','sigColorable','sigColor']));
 }
 
 async function goToPage(n){
@@ -738,14 +754,12 @@ function activePageCount(){ return numPages - deletedPages.size; }
 async function toggleDeletePage(n){
   const wrap = thumbEls[n];
   if(!wrap) return;
-  saveCurrentPageSilently();
   if(deletedPages.has(n)){
     deletedPages.delete(n);
     wrap.classList.remove('deleted');
     wrap.querySelector('.del-btn').innerHTML = trashIconSvg();
     wrap.querySelector('.del-btn').title = 'Hapus halaman';
     toast(`Halaman ${n} dipulihkan`);
-    pushHistory(true,`Pulihkan halaman ${n}`);
   } else {
     if(activePageCount()<=1){ toast('Tidak bisa menghapus — minimal harus ada 1 halaman'); return; }
     if(!confirm(`Hapus halaman ${n} dari dokumen?`)) return;
@@ -760,7 +774,6 @@ async function toggleDeletePage(n){
       if(next===null) for(let k=n-1;k>=1;k--){ if(!deletedPages.has(k)){ next=k; break; } }
       if(next!==null){ currentPage=next; await renderPage(next); }
     }
-    pushHistory(true,`Hapus halaman ${n}`);
   }
   updateStatusPage();
 }
@@ -806,92 +819,43 @@ function syncZoomSelect(){
 /* ============================================================
    HISTORY (undo/redo)
 ============================================================ */
-const HIST_MAX=100;
-let _histBusy=false;
-// satu snapshot = seluruh keadaan dokumen (PDF, isi tiap halaman, halaman terhapus, crop)
-function makeSnap(label){
-  return {bytes:originalBytes, pageStates:{...pageStates}, deleted:[...deletedPages], crops:{...cropBoxes}, page:currentPage, label:label||''};
-}
-function pushHistory(force,label){
+function pushHistory(force){
   if(suppressHistory && !force) return;
-  if(!pdfDoc) return;
-  pageStates[currentPage] = JSON.stringify(fabricCanvas.toJSON(['selectable','redact']));
-  const sn=makeSnap(label), last=historyStack[historyIndex];
-  if(last && last.bytes===sn.bytes && last.page===sn.page && last.pageStates[sn.page]===sn.pageStates[sn.page]
-     && last.deleted.join()===sn.deleted.join() && JSON.stringify(last.crops)===JSON.stringify(sn.crops)){ updateUndoRedoButtons(); return; }
+  const json = JSON.stringify(fabricCanvas.toJSON(['selectable','redact','sigColorable','sigColor']));
   historyStack = historyStack.slice(0, historyIndex+1);
-  historyStack.push(sn);
-  if(historyStack.length>HIST_MAX) historyStack.shift();
-  historyIndex = historyStack.length-1;
-  updateUndoRedoButtons();
-}
-function resetHistory(){
-  historyStack=[]; historyIndex=-1;
-  if(pdfDoc) pushHistory(true);
+  historyStack.push({page: currentPage, json});
+  historyIndex++;
+  pageStates[currentPage] = json;
   updateUndoRedoButtons();
 }
 function updateUndoRedoButtons(){
   document.getElementById('btn-undo').disabled = historyIndex<=0;
   document.getElementById('btn-redo').disabled = historyIndex>=historyStack.length-1;
 }
-function syncThumbDeleted(){
-  for(const [k,wrap] of Object.entries(thumbEls)){
-    const del=deletedPages.has(+k), b=wrap.querySelector('.del-btn');
-    wrap.classList.toggle('deleted',del);
-    if(b){ b.innerHTML=del?restoreIconSvg():trashIconSvg(); b.title=del?'Pulihkan halaman':'Hapus halaman'; }
-  }
-}
-async function restoreSnap(sn,goPage){
+async function loadFromHistoryEntry(entry){
   suppressHistory=true;
-  try{
-    fabricCanvas.discardActiveObject();
-    const structural=sn.bytes!==originalBytes;
-    pageStates={...sn.pageStates}; deletedPages=new Set(sn.deleted); cropBoxes={...sn.crops};
-    let p=Math.max(1,goPage||1);
-    if(structural){
-      originalBytes=sn.bytes;
-      pdfDoc=await pdfjsLib.getDocument({data:sn.bytes.slice()}).promise;
-      numPages=pdfDoc.numPages; pageDims={};
-      p=Math.min(p,numPages);
-      currentPage=p;
-      document.getElementById('filename-tag').textContent=fileLabel+'.pdf · '+numPages+' hal';
-      await buildThumbs(); await renderPage(p);
-    } else {
-      p=Math.min(p,numPages);
-      if(deletedPages.has(p)){ for(let k=1;k<=numPages;k++) if(!deletedPages.has(k)){ p=k; break; } }
-      syncThumbDeleted();
-      if(p!==currentPage){ currentPage=p; await renderPage(p); }
-      else{
-        const json=pageStates[p];
-        await new Promise(res=>{
-          if(!json){ fabricCanvas.clear(); fabricCanvas.renderAll(); return res(); }
-          fabricCanvas.loadFromJSON(json,()=>{ fabricCanvas.forEachObject(o=>o.selectable=(currentTool==='select')); fabricCanvas.renderAll(); res(); });
-        });
-        clearProps();
-      }
-    }
-    updateStatusPage();
-  } finally { suppressHistory=false; }
+  if(entry.page!==currentPage){
+    currentPage=entry.page;
+    await renderPage(currentPage, false);
+  }
+  fabricCanvas.loadFromJSON(entry.json, ()=>{
+    fabricCanvas.forEachObject(o=> o.selectable=(currentTool==='select'));
+    fabricCanvas.renderAll();
+    pageStates[currentPage]=entry.json;
+    suppressHistory=false;
+    updateUndoRedoButtons();
+  });
 }
-async function stepHistory(dir){
-  if(_histBusy||!pdfDoc) return;
-  const ni=historyIndex+dir; if(ni<0||ni>=historyStack.length) return;
-  _histBusy=true;
-  try{
-    // simpan dulu keadaan kanvas supaya tidak ada perubahan yang hilang
-    saveCurrentPageSilently();
-    const cur=historyStack[historyIndex], target=historyStack[ni];
-    const label=dir<0?cur.label:target.label;
-    historyIndex=ni;
-    await restoreSnap(target, dir<0?cur.page:target.page);
-    const d=docs.find(x=>x.id===activeId); if(d) d.saved=false;
-    updateUndoRedoButtons(); renderFileList();
-    if(label) toast((dir<0?'Undo: ':'Redo: ')+label);
-  }catch(err){ console.error(err); toast('Undo/Redo gagal: '+err.message); }
-  finally{ _histBusy=false; }
-}
-document.getElementById('btn-undo').addEventListener('click',()=>stepHistory(-1));
-document.getElementById('btn-redo').addEventListener('click',()=>stepHistory(1));
+document.getElementById('btn-undo').addEventListener('click', async ()=>{
+  if(historyIndex<=0) return;
+  historyIndex--;
+  await loadFromHistoryEntry(historyStack[historyIndex]);
+});
+document.getElementById('btn-redo').addEventListener('click', async ()=>{
+  if(historyIndex>=historyStack.length-1) return;
+  historyIndex++;
+  await loadFromHistoryEntry(historyStack[historyIndex]);
+});
 ['object:added','object:modified','object:removed'].forEach(ev=>{
   fabricCanvas.on(ev, ()=>{ if(!suppressHistory) pushHistory(); });
 });
@@ -899,8 +863,6 @@ document.getElementById('btn-redo').addEventListener('click',()=>stepHistory(1))
 document.addEventListener('keydown', (e)=>{
   if(!pdfDoc) return;
   const ctrl = e.ctrlKey||e.metaKey;
-  const _tg=document.activeElement&&document.activeElement.tagName;
-  if(ctrl && (_tg==='INPUT'||_tg==='SELECT') && ['z','y'].includes(e.key.toLowerCase())) return;
   if(ctrl && e.key.toLowerCase()==='z' && !e.shiftKey){ e.preventDefault(); document.getElementById('btn-undo').click(); }
   else if(ctrl && (e.key.toLowerCase()==='y' || (e.key.toLowerCase()==='z'&&e.shiftKey))){ e.preventDefault(); document.getElementById('btn-redo').click(); }
   else if(ctrl && e.key.toLowerCase()==='c'){ const a=fabricCanvas.getActiveObject(); if(a){ a.clone(c=>clipboardObj=c); } }
@@ -1046,14 +1008,14 @@ document.getElementById('num-apply').addEventListener('click', async ()=>{
             const tmp = new fabric.StaticCanvas(null,{width:1,height:1});
             loaded.forEach(o=>tmp.add(o));
             tmp.add(txt);
-            pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact']));
+            pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact','sigColorable','sigColor']));
             res();
           });
         });
       } else {
         const tmp = new fabric.StaticCanvas(null,{width:1,height:1});
         tmp.add(txt);
-        pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact']));
+        pageStates[n] = JSON.stringify(tmp.toJSON(['selectable','redact','sigColorable','sigColor']));
       }
       val += step;
     }
@@ -1076,10 +1038,73 @@ document.getElementById('num-apply').addEventListener('click', async ()=>{
 const modalSig = document.getElementById('modal-sig');
 let sigMode='sign';
 let sigPad, sigCtx, sigDrawing=false, sigHasInk=false;
-let uploadedImgDataUrl=null;
+let uploadedImgDataUrl=null, uploadedHasAlpha=false;
+const SIG_BLACK='#111111', SIG_BLUE='#1d4ed8';
+let sigColors={draw:SIG_BLACK, upload:'original'};
+let sigTab='draw';
+
+function hexToRgb(h){ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+// Recolor image: keeps transparency; if image is opaque (JPG etc.), white becomes transparent.
+function processImage(url, hex){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const k=Math.min(1, 1600/Math.max(img.width,img.height));
+      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*k)); c.height=Math.max(1,Math.round(img.height*k));
+      const x=c.getContext('2d'); x.drawImage(img,0,0,c.width,c.height);
+      const d=x.getImageData(0,0,c.width,c.height), a=d.data;
+      let hasAlpha=false;
+      for(let i=3;i<a.length;i+=4){ if(a[i]<250){ hasAlpha=true; break; } }
+      if(!hex){ resolve({url, hasAlpha}); return; }
+      const [r,g,b]=hexToRgb(hex);
+      for(let i=0;i<a.length;i+=4){
+        if(!hasAlpha){
+          const lum=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2];
+          a[i+3]=Math.min(255,(255-lum)*1.4);
+        }
+        a[i]=r; a[i+1]=g; a[i+2]=b;
+      }
+      x.putImageData(d,0,0);
+      resolve({url:c.toDataURL('image/png'), hasAlpha});
+    };
+    img.onerror=()=>resolve({url, hasAlpha:false});
+    img.src=url;
+  });
+}
+function recolorCanvas(cv, hex){
+  const x=cv.getContext('2d'); const d=x.getImageData(0,0,cv.width,cv.height), a=d.data;
+  const [r,g,b]=hexToRgb(hex);
+  for(let i=0;i<a.length;i+=4){ a[i]=r; a[i+1]=g; a[i+2]=b; }
+  x.putImageData(d,0,0);
+}
+function refreshSwatches(){
+  const cur=sigColors[sigTab];
+  document.querySelectorAll('#sig-swatches [data-color]').forEach(b=>b.classList.toggle('active', b.dataset.color===cur));
+  const custom=document.getElementById('sig-color-custom');
+  custom.classList.toggle('active', cur!=='original' && cur!==SIG_BLACK && cur!==SIG_BLUE);
+  document.getElementById('sig-sw-orig').style.display = sigTab==='upload' ? 'inline-flex' : 'none';
+  document.getElementById('sig-color-row').style.display = (sigTab==='draw'||sigTab==='upload') ? 'block' : 'none';
+}
+async function refreshUploadPreview(){
+  if(!uploadedImgDataUrl) return;
+  const c=sigColors.upload;
+  const r = await processImage(uploadedImgDataUrl, c==='original'?null:c);
+  document.getElementById('sig-upload-preview').innerHTML = `<img src="${r.url}" style="max-width:100%;max-height:120px;background:#fff;border:1px solid var(--line);border-radius:6px">`;
+}
+function setSigColor(c){
+  sigColors[sigTab]=c;
+  if(sigTab==='draw'){
+    if(sigCtx){ sigCtx.strokeStyle=c; recolorCanvas(sigPad,c); }
+  } else refreshUploadPreview();
+  refreshSwatches();
+}
+document.querySelectorAll('#sig-swatches .swatch').forEach(b=>b.addEventListener('click', ()=>setSigColor(b.dataset.color)));
+document.getElementById('sig-color-custom').addEventListener('input', e=>setSigColor(e.target.value));
 
 function openSigModal(mode){
   sigMode=mode;
+  sigColors={draw:SIG_BLACK, upload:'original'};
+  uploadedHasAlpha=false;
   document.getElementById('sig-title').textContent = mode==='sign' ? 'Tanda Tangan' : 'Stempel';
   document.getElementById('sig-sub').textContent = mode==='sign'
     ? 'Gambar langsung atau unggah gambar tanda tangan.'
@@ -1094,6 +1119,7 @@ function openSigModal(mode){
 document.getElementById('sig-cancel').addEventListener('click', ()=>modalSig.classList.remove('show'));
 document.querySelectorAll('#sig-tabs button').forEach(b=>b.addEventListener('click', ()=>switchSigTab(b.dataset.tab)));
 function switchSigTab(tab){
+  sigTab=tab; refreshSwatches();
   document.querySelectorAll('#sig-tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.tabpane').forEach(p=>p.classList.toggle('active', p.dataset.pane===tab));
 }
@@ -1103,7 +1129,7 @@ function initSigPad(){
   sigPad.width = wrap.clientWidth; sigPad.height=150;
   sigCtx = sigPad.getContext('2d');
   sigCtx.clearRect(0,0,sigPad.width,sigPad.height);
-  sigCtx.lineWidth=2.4; sigCtx.lineCap='round'; sigCtx.strokeStyle='#1c1a17';
+  sigCtx.lineWidth=2.4; sigCtx.lineCap='round'; sigCtx.strokeStyle=sigColors.draw;
   sigHasInk=false;
   const pos = e=>{
     const r=sigPad.getBoundingClientRect();
@@ -1122,7 +1148,7 @@ document.getElementById('image-input').addEventListener('change', (e)=>{
   const reader = new FileReader();
   reader.onload = ()=>{
     uploadedImgDataUrl = reader.result;
-    document.getElementById('sig-upload-preview').innerHTML = `<img src="${uploadedImgDataUrl}" style="max-width:100%;max-height:120px">`;
+    processImage(uploadedImgDataUrl, null).then(r=>{ uploadedHasAlpha=r.hasAlpha; refreshUploadPreview(); });
   };
   reader.readAsDataURL(f);
   e.target.value='';
@@ -1137,18 +1163,23 @@ document.getElementById('sig-apply').addEventListener('click', ()=>{
     if(!sigHasInk){ toast('Gambar tanda tangan terlebih dahulu'); return; }
     const url = sigPad.toDataURL('image/png');
     fabric.Image.fromURL(url, (img)=>{
-      img.set({left:80, top:120, opacity:1});
+      img.set({left:80, top:120, opacity:1, sigColorable:true, sigColor:sigColors.draw});
       img.scaleToWidth(180);
       fabricCanvas.add(img); fabricCanvas.setActiveObject(img);
       pushHistory();
     });
   } else if(activeTab==='upload'){
     if(!uploadedImgDataUrl){ toast('Pilih gambar terlebih dahulu'); return; }
-    fabric.Image.fromURL(uploadedImgDataUrl, (img)=>{
-      img.set({left:80, top:120});
-      img.scaleToWidth(160);
-      fabricCanvas.add(img); fabricCanvas.setActiveObject(img);
-      pushHistory();
+    const upColor = sigColors.upload;
+    processImage(uploadedImgDataUrl, upColor==='original'?null:upColor).then(r=>{
+      fabric.Image.fromURL(r.url, (img)=>{
+        img.set({left:80, top:120,
+          sigColorable: upColor!=='original' || r.hasAlpha,
+          sigColor: upColor==='original' ? null : upColor});
+        img.scaleToWidth(160);
+        fabricCanvas.add(img); fabricCanvas.setActiveObject(img);
+        pushHistory();
+      });
     });
   } else if(activeTab==='preset'){
     const txt = document.getElementById('stamp-custom').value.trim() || 'STEMPEL';
@@ -1207,6 +1238,18 @@ function renderProps(){
       </select>
     </div>`;
   }
+  if(obj.type==='image' && obj.sigColorable){
+    const sc=(obj.sigColor||'').toLowerCase();
+    const custom = sc && sc!==SIG_BLACK && sc!==SIG_BLUE;
+    html += `
+    <div class="field"><label>Warna tanda tangan</label>
+      <div class="swatches" id="p-sigcolors">
+        <button type="button" class="swatch ${sc===SIG_BLACK?'active':''}" data-color="${SIG_BLACK}" style="background:${SIG_BLACK}" title="Hitam"></button>
+        <button type="button" class="swatch ${sc===SIG_BLUE?'active':''}" data-color="${SIG_BLUE}" style="background:${SIG_BLUE}" title="Biru"></button>
+        <input type="color" id="p-sigcolor-custom" class="${custom?'active':''}" value="${custom?toHex(sc):'#dc2626'}" title="Warna lain">
+      </div>
+    </div>`;
+  }
   if(obj.type==='rect' || obj.type==='ellipse'){
     html += `
     <div class="field"><label>Warna isi</label><input type="color" id="p-fill" value="${toHex(obj.fill)||'#ffffff'}"></div>
@@ -1237,6 +1280,13 @@ function renderProps(){
   bind('p-angle','input', (e)=>{ obj.set('angle', parseFloat(e.target.value)||0); obj.setCoords(); fabricCanvas.requestRenderAll(); });
   bind('p-fill','input', (e)=>{ obj.set('fill', e.target.value); fabricCanvas.requestRenderAll(); });
   bind('p-stroke','input', (e)=>{ obj.set('stroke', e.target.value); fabricCanvas.requestRenderAll(); });
+  const tintSig = (hex)=>{
+    obj.filters=[new fabric.Image.filters.BlendColor({color:hex, mode:'tint', alpha:1})];
+    obj.applyFilters(); obj.sigColor=hex;
+    fabricCanvas.requestRenderAll(); pushHistory(); renderProps();
+  };
+  document.querySelectorAll('#p-sigcolors .swatch').forEach(b=>b.addEventListener('click', ()=>tintSig(b.dataset.color)));
+  bind('p-sigcolor-custom','change', (e)=>tintSig(e.target.value));
   bind('p-opacity','input', (e)=>{ obj.set('opacity', e.target.value/100); document.getElementById('p-op-val').textContent=e.target.value+'%'; fabricCanvas.requestRenderAll(); });
   bind('p-left','input', (e)=>{ obj.set('left', parseFloat(e.target.value)||0); fabricCanvas.requestRenderAll(); });
   bind('p-top','input', (e)=>{ obj.set('top', parseFloat(e.target.value)||0); fabricCanvas.requestRenderAll(); });
@@ -1434,6 +1484,7 @@ async function exportPdfFlatten(){
    CROP, GUIDES, REORDER, MERGE, PROJECT, BATCH
 ============================================================ */
 let cropBoxes={}, guides=[];
+let cropSnap=null;
 function setCrop(r){
   const b={x:Math.max(0,r.left),y:Math.max(0,r.top),w:r.width,h:r.height};
   if(b.w<8||b.h<8){ toast('Area crop terlalu kecil — dibatalkan'); return; }
@@ -1443,6 +1494,7 @@ function setCrop(r){
 async function applyCropNow(b, all){
   if(!pdfDoc) return;
   saveCurrentPageSilently();
+  const snap={id:activeId, bytes:originalBytes, pageStates:{...pageStates}, deleted:new Set(deletedPages), crops:{...cropBoxes}, page:currentPage};
   toast('Memotong halaman…');
   const src=await PDFDocument.load(originalBytes.slice(0),{ignoreEncryption:true});
   const dst=await PDFDocument.create(), sp=src.getPages();
@@ -1466,11 +1518,16 @@ async function applyCropNow(b, all){
     (j.objects||[]).forEach(o=>{ o.left=(o.left||0)-shifts[n].dx; o.top=(o.top||0)-shifts[n].dy; });
     pageStates[n]=JSON.stringify(j);
   }
+  cropSnap=snap;
   await reloadDoc(out,currentPage);
-  pushHistory(true,'Crop');
   const d=docs.find(x=>x.id===activeId); if(d) d.saved=false;
-  renderFileList();
-  toast(`Crop diterapkan ke ${Object.keys(shifts).length} halaman — tekan Undo (Ctrl+Z) untuk membatalkan`);
+  updateCropUndoBtn(); renderFileList();
+  toast(`Crop diterapkan ke ${Object.keys(shifts).length} halaman — halaman sudah terpotong`);
+}
+function updateCropUndoBtn(){
+  const b=document.getElementById('btn-cropundo'), on=cropSnap&&cropSnap.id===activeId;
+  b.style.display=on?'':'none';
+  if(on) b.textContent=cropSnap.label==='Putar'?'Urungkan Putar':'Urungkan Crop';
 }
 
 /* ============================================================
@@ -1482,6 +1539,7 @@ async function rotatePages(theta){
   if(!isFinite(theta)||theta===0) return toast('Isi sudut rotasi selain 0°');
   const all=document.getElementById('rot-scope').value==='all';
   saveCurrentPageSilently();
+  const snap={id:activeId, bytes:originalBytes, pageStates:{...pageStates}, deleted:new Set(deletedPages), crops:{...cropBoxes}, page:currentPage, label:'Putar'};
   toast('Memutar halaman…');
   // cos/sin searah jarum jam; tepat untuk kelipatan 90°
   const trig=a=>{ a=((a%360)+360)%360; if(a%90===0){ const k=a/90; return {c:[1,0,-1,0][k],s:[0,1,0,-1][k]}; } const r=a*Math.PI/180; return {c:Math.cos(r),s:Math.sin(r)}; };
@@ -1521,10 +1579,10 @@ async function rotatePages(theta){
       });
       pageStates[n]=JSON.stringify(j);
     }
+    cropSnap=snap;
     await reloadDoc(out,currentPage);
-    pushHistory(true,'Putar halaman');
     const d=docs.find(x=>x.id===activeId); if(d) d.saved=false;
-    renderFileList();
+    updateCropUndoBtn(); renderFileList();
     toast(`${done.length} halaman diputar ${+theta.toFixed(2)}° searah jarum jam`+(free?' (ukuran halaman tetap, bagian yang keluar batas terpotong)':''));
   }catch(err){ console.error(err); toast('Gagal memutar: '+err.message); }
 }
@@ -1534,6 +1592,15 @@ const rotCustom=document.getElementById('rot-custom');
 const rotCustomGo=()=>{ const v=parseFloat(rotCustom.value); if(isNaN(v)) return toast('Ketik sudut rotasi dulu, mis. 15 atau -7.5'); rotatePages(v); };
 document.getElementById('btn-rotc').addEventListener('click',rotCustomGo);
 rotCustom.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); rotCustomGo(); } e.stopPropagation(); });
+document.getElementById('btn-cropundo').addEventListener('click',async()=>{
+  const s=cropSnap; if(!s||s.id!==activeId) return;
+  const lbl=s.label||'Crop';
+  pageStates=s.pageStates; deletedPages=s.deleted; cropBoxes=s.crops;
+  cropSnap=null;
+  await reloadDoc(s.bytes,s.page);
+  const d=docs.find(x=>x.id===activeId); if(d) d.saved=false;
+  updateCropUndoBtn(); renderFileList(); toast(lbl+' diurungkan');
+});
 fabricCanvas.on('after:render',()=>{
   const c=fabricCanvas.contextContainer, z=zoom, W=fabricCanvas.getWidth(), H=fabricCanvas.getHeight(), cb=cropBoxes[currentPage];
   if(cb){ c.save(); c.fillStyle='rgba(0,0,0,.45)'; c.beginPath(); c.rect(0,0,W,H); c.rect(cb.x*z,cb.y*z,cb.w*z,cb.h*z); c.fill('evenodd');
@@ -1555,7 +1622,7 @@ window.addEventListener('beforeunload',(e)=>{ if(pdfDoc){ e.preventDefault(); e.
 
 async function reloadDoc(bytes,go){
   originalBytes=bytes; pdfDoc=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
-  numPages=pdfDoc.numPages; pageDims={};
+  numPages=pdfDoc.numPages; pageDims={}; historyStack=[]; historyIndex=-1;
   currentPage=Math.min(Math.max(1,go||1),numPages);
   document.getElementById('filename-tag').textContent=fileLabel+'.pdf · '+numPages+' hal';
   await buildThumbs(); await renderPage(currentPage); updateUndoRedoButtons();
@@ -1570,8 +1637,7 @@ async function reorder(a,b){
     pageStates=rm(pageStates); cropBoxes=rm(cropBoxes);
     deletedPages=new Set(ord.map((old,i)=>deletedPages.has(old)?i+1:0).filter(Boolean));
     await reloadDoc(await dst.save(), ord.indexOf(currentPage)+1);
-    pushHistory(true,'Ubah urutan halaman');
-    toast(`Halaman ${a} dipindah ke posisi ${b}`);
+    toast(`Halaman ${a} dipindah ke posisi ${b} (riwayat undo direset)`);
   }catch(err){ console.error(err); toast('Gagal mengubah urutan: '+err.message); }
 }
 document.getElementById('btn-addpdf').addEventListener('click',()=>{ if(!pdfDoc) return toast('Buka PDF terlebih dahulu'); document.getElementById('add-input').click(); });
@@ -1581,7 +1647,7 @@ document.getElementById('add-input').addEventListener('change',async(e)=>{
   try{
     const A=await PDFDocument.load(originalBytes.slice(0));
     for(const f of fs){ const B=await PDFDocument.load(await f.arrayBuffer(),{ignoreEncryption:true}); (await A.copyPages(B,B.getPageIndices())).forEach(p=>A.addPage(p)); }
-    await reloadDoc(await A.save(),currentPage); pushHistory(true,'Tambah PDF'); toast(`${fs.length} PDF ditambahkan di akhir — seret thumbnail untuk mengatur urutan`);
+    await reloadDoc(await A.save(),currentPage); toast(`${fs.length} PDF ditambahkan di akhir — seret thumbnail untuk mengatur urutan`);
   }catch(err){ console.error(err); toast('Gagal menambah PDF: '+err.message); }
 });
 
@@ -1728,7 +1794,6 @@ function stashActive(){
   const d=docs.find(x=>x.id===activeId); if(!d||!pdfDoc) return;
   saveCurrentPageSilently();
   d.bytes=originalBytes; d.pageStates=pageStates; d.deleted=deletedPages; d.crops=cropBoxes;
-  d.hist={stack:historyStack,idx:historyIndex};
   d.page=currentPage; d.pages=numPages; d.name=fileLabel;
 }
 function hasEdits(d){
@@ -1765,9 +1830,7 @@ async function _activate(id){
   renderFileList();
   await buildThumbs();
   await renderPage(currentPage);
-  const hh=d.hist, top=hh&&hh.stack[hh.idx];
-  if(top&&top.bytes===d.bytes){ historyStack=hh.stack; historyIndex=hh.idx; updateUndoRedoButtons(); }
-  else resetHistory();
+  updateUndoRedoButtons(); updateCropUndoBtn();
 }
 function resetEmpty(){
   pdfDoc=null; activeId=null; originalBytes=null; fileLabel=''; numPages=0; currentPage=1;
@@ -1780,7 +1843,7 @@ function resetEmpty(){
   document.getElementById('filename-tag').textContent='';
   document.getElementById('status-page').textContent='Halaman — / —';
   document.getElementById('thumb-list').innerHTML='';
-  updateUndoRedoButtons(); clearProps();
+  updateUndoRedoButtons(); clearProps(); cropSnap=null; updateCropUndoBtn();
 }
 
 /* ---- menambah file ---- */
