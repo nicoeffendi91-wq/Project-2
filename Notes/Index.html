@@ -52,7 +52,10 @@ textarea{min-height:84px;resize:vertical}
 .addrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .addrow .btn{padding:7px 12px;font-size:13px}
 .hint{font-size:12.5px;color:var(--mute);margin-top:8px}
-.actions{display:flex;gap:8px;margin-top:16px}
+.actions{display:flex;gap:8px;margin-top:16px;align-items:center}
+.actions .primary{flex:none}
+.saved{flex:1;color:var(--mute);font-size:13px}.saved.on{color:var(--ok)}
+.note.aktif{box-shadow:0 0 0 2px var(--accent)}
 .btn{border:0;border-radius:8px;padding:10px 16px;font:600 14px inherit;font-family:inherit;cursor:pointer}
 .primary{background:var(--accent);color:var(--accent-ink);flex:1}
 .ghost{background:transparent;color:var(--mute);border:1px solid var(--line)}
@@ -116,8 +119,8 @@ textarea{min-height:84px;resize:vertical}
         <textarea id="tindak" placeholder="Siapa mengerjakan apa, sampai kapan"></textarea>
       </div>
       <div class="actions">
-        <button class="btn primary" id="simpan" type="button">Simpan catatan</button>
-        <button class="btn ghost hide" id="batal" type="button">Batal</button>
+        <span class="saved" id="saved" role="status">Tersimpan otomatis</span>
+        <button class="btn primary" id="baru" type="button">+ Catatan baru</button>
       </div>
     </section>
 
@@ -199,19 +202,23 @@ textarea{min-height:84px;resize:vertical}
 
   function reset(){
     editId=null;["judul","isi","peserta","agenda","tindak"].forEach(function(i){$(i).value=""});
-    $("tgl").value=today();rows=[];addRows(5);$("batal").classList.add("hide");$("simpan").textContent="Simpan catatan";
+    $("tgl").value=today();rows=[];addRows(5);$("saved").textContent="Tersimpan otomatis";$("saved").classList.remove("on");
   }
 
+  var timer=null;
+  function schedule(){var s=$("saved");s.textContent="Menyimpan...";s.classList.remove("on");clearTimeout(timer);timer=setTimeout(simpan,400)}
+  function flash(){var s=$("saved");s.textContent="Tersimpan otomatis";s.classList.add("on")}
   function simpan(){
     var judul=$("judul").value.trim();
-    if(!judul){toast("Isi judul dulu");$("judul").focus();return}
+    var kosong=!judul&&!$("isi").value.trim()&&!$("peserta").value.trim()&&!$("agenda").value.trim()&&!$("tindak").value.trim()&&!rows.some(function(r){return r.u.trim()||r.k.trim()||r.s!=="belum"});
+    if(kosong&&!editId){$("saved").textContent="Tersimpan otomatis";$("saved").classList.remove("on");return}
     var n={id:editId||String(Date.now()),tipe:tipe,judul:judul,tgl:$("tgl").value||today(),isi:$("isi").value.trim(),
-      status:"",rows:tipe==="cek"?rows.filter(function(r){return r.u.trim()||r.k.trim()}).map(function(r){return{u:r.u.trim(),s:r.s,k:r.k.trim()}}):[],peserta:tipe==="rapat"?$("peserta").value.trim():"",
-      agenda:tipe==="rapat"?$("agenda").value.trim():"",tindak:tipe==="rapat"?$("tindak").value.trim():"",
+      status:"",rows:rows.filter(function(r){return r.u.trim()||r.k.trim()}).map(function(r){return{u:r.u.trim(),s:r.s,k:r.k.trim()}}),peserta:$("peserta").value.trim(),
+      agenda:$("agenda").value.trim(),tindak:$("tindak").value.trim(),
       dibuat:Date.now()};
     if(editId){notes=notes.map(function(x){if(x.id===editId){n.dibuat=x.dibuat;return n}return x})}
-    else notes.unshift(n);
-    save();toast(editId?"Perubahan disimpan":"Catatan disimpan");reset();render();
+    else{notes.unshift(n);editId=n.id}
+    save();var y=window.scrollY;render();window.scrollTo(0,y);flash();
   }
 
   function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
@@ -245,7 +252,7 @@ textarea{min-height:84px;resize:vertical}
       box.appendChild(el("div","empty",notes.length?"Tidak ada catatan yang cocok.":"Belum ada catatan. Isi form lalu pilih Simpan catatan."));return;
     }
     rows.forEach(function(n){
-      var c=el("article","note");c.dataset.t=n.tipe;
+      var c=el("article","note");c.dataset.t=n.tipe;if(n.id===editId)c.classList.add("aktif");
       var m=el("div","meta");
       m.appendChild(el("span","badge b-type",NAMA[n.tipe]));
       if(n.tipe==="cek"&&n.rows&&n.rows.length){
@@ -255,7 +262,7 @@ textarea{min-height:84px;resize:vertical}
         if(cn.belum)m.appendChild(el("span","badge b-belum",cn.belum+" belum dicek"));
       } else if(n.tipe==="cek"&&n.status)m.appendChild(el("span","badge b-"+n.status,LBL[n.status]));
       m.appendChild(el("span",null,fmt(n.tgl)));
-      c.appendChild(m);c.appendChild(el("h3",null,n.judul));
+      c.appendChild(m);c.appendChild(el("h3",null,n.judul||"(Tanpa judul)"));
       [n.tipe==="cek"&&n.rows&&n.rows.length?listTable(n):null,field("Peserta",n.peserta),field("Agenda",n.agenda),
        field(n.tipe==="rapat"?"Pembahasan":n.tipe==="cek"?(n.rows&&n.rows.length?"Catatan tambahan":"Hasil pengecekan"):"Catatan",n.isi),
        field("Keputusan dan tindak lanjut",n.tindak)].forEach(function(f){if(f)c.appendChild(f)});
@@ -268,13 +275,13 @@ textarea{min-height:84px;resize:vertical}
 
   function edit(id){
     var n=notes.filter(function(x){return x.id===id})[0];if(!n)return;
-    editId=id;setTipe(n.tipe);
+    clearTimeout(timer);simpan();editId=id;setTipe(n.tipe);
     $("judul").value=n.judul;$("tgl").value=n.tgl;$("isi").value=n.isi;
     $("peserta").value=n.peserta;$("agenda").value=n.agenda;$("tindak").value=n.tindak;
     rows=(n.rows||[]).map(function(r){return{u:r.u,s:r.s,k:r.k}});
     if(n.tipe==="cek"&&!rows.length)addRows(5);else drawRows();
-    $("batal").classList.remove("hide");$("simpan").textContent="Simpan perubahan";
-    window.scrollTo({top:0,behavior:"smooth"});$("judul").focus();
+    $("saved").textContent="Tersimpan otomatis";$("saved").classList.remove("on");
+    window.scrollTo({top:0,behavior:"smooth"});$("judul").focus();render();
   }
   function hapus(id){
     if(!confirm("Hapus catatan ini? Tindakan ini tidak bisa dibatalkan."))return;
@@ -289,7 +296,16 @@ textarea{min-height:84px;resize:vertical}
     if(!e.target.dataset.f)return;filter=e.target.dataset.f;
     [].forEach.call($("chips").children,function(b){b.setAttribute("aria-pressed",b.dataset.f===filter)});render();
   });
-  $("simpan").onclick=simpan;$("batal").onclick=function(){reset()};
+  $("baru").onclick=function(){clearTimeout(timer);simpan();reset();render();$("judul").focus()};
+  var fc=document.querySelector(".form-card");
+  ["input","change","click","paste","keydown"].forEach(function(ev){fc.addEventListener(ev,function(e){
+    if(e.target.id==="baru")return;
+    if(e.type==="click"&&!e.target.closest("button"))return;
+    if(e.type==="keydown"&&e.key!=="Enter")return;
+    schedule();
+  })});
+  window.addEventListener("pagehide",function(){clearTimeout(timer);simpan()});
+  document.addEventListener("visibilitychange",function(){if(document.hidden){clearTimeout(timer);simpan()}});
   $("cari").addEventListener("input",render);
   load();setTipe("kerja");reset();render();
 })();
