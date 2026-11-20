@@ -334,7 +334,7 @@ kbd{
     <div class="sep"></div>
     <button class="tbtn" id="btn-open">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-      Buka PDF
+      Buka PDF / Gambar
     </button>
     <span id="filename-tag"></span>
     <button class="tbtn" id="btn-files" style="display:none" title="Tampilkan/sembunyikan daftar berkas">Berkas <span id="btn-files-n" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span></button>
@@ -363,11 +363,13 @@ kbd{
     <input type="number" id="rot-custom" step="any" value="" placeholder="° bebas" title="Sudut rotasi bebas dalam derajat. Positif = searah jarum jam, negatif = berlawanan. Contoh: 15 atau -7.5" style="width:78px;padding:6px 6px;border:1px solid var(--line);border-radius:5px;font-size:12.5px;font-family:var(--sans)">
     <button class="tbtn" id="btn-rotc" title="Putar sesuai sudut yang diketik">Putar</button>
     <button class="tbtn" id="btn-cropundo" style="display:none" title="Kembalikan halaman sebelum crop terakhir">Urungkan Crop</button>
-    <button class="tbtn" id="btn-addpdf">+ Tambah PDF</button>
+    <button class="tbtn" id="btn-addpdf">+ Tambah PDF / Gambar</button>
     <button class="tbtn" id="btn-batch" title="Terapkan objek halaman aktif ke banyak PDF">Batch</button>
     <button class="tbtn" id="btn-saveproj">Simpan Proyek</button>
     <button class="tbtn" id="btn-loadproj">Buka Proyek</button>
     <div class="spacer"></div>
+    <select id="img-fmt" class="tbtn" title="Format gambar untuk ekspor halaman aktif" style="padding:0 6px"><option value="jpeg">JPG</option><option value="png">PNG</option></select>
+    <button class="tbtn" id="btn-export-img" title="Simpan halaman yang sedang dibuka sebagai gambar">Ekspor Gambar</button>
     <button class="tbtn primary" id="btn-export" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
       Export PDF
@@ -402,9 +404,9 @@ kbd{
       <div id="empty-state">
         <div class="glyph"></div>
         <h2>Belum ada dokumen</h2>
-        <p>Buka file PDF untuk mulai menambahkan teks, nomor otomatis, tanda tangan, stempel, atau bentuk.</p>
-        <button class="tbtn primary" id="btn-open-2" style="margin-top:6px">Buka PDF</button>
-        <div class="small-note">Atau seret banyak PDF (Ctrl+A di File Explorer) / satu folder ke jendela ini.</div>
+        <p>Buka file PDF atau gambar (JPG, PNG, WEBP, dll.) untuk mulai menambahkan teks, nomor otomatis, tanda tangan, stempel, atau bentuk.</p>
+        <button class="tbtn primary" id="btn-open-2" style="margin-top:6px">Buka PDF / Gambar</button>
+        <div class="small-note">Atau seret banyak PDF / gambar (Ctrl+A di File Explorer) / satu folder ke jendela ini.</div>
       </div>
       <div class="page-wrap" id="page-wrap" style="display:none">
         <canvas id="base-canvas"></canvas>
@@ -443,11 +445,11 @@ kbd{
   </div>
 </div>
 
-<div id="drop-overlay"><div>Lepaskan untuk menambahkan PDF<small>Bisa banyak file sekaligus, atau satu folder</small></div></div>
-<input type="file" id="file-input" accept="application/pdf" multiple hidden>
-<input type="file" id="add-input" accept="application/pdf" multiple hidden>
+<div id="drop-overlay"><div>Lepaskan untuk menambahkan PDF / gambar<small>Bisa banyak file sekaligus, atau satu folder</small></div></div>
+<input type="file" id="file-input" accept="application/pdf,image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif" multiple hidden>
+<input type="file" id="add-input" accept="application/pdf,image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif" multiple hidden>
 <input type="file" id="proj-input" accept=".json,application/json" hidden>
-<input type="file" id="image-input" accept="image/*" hidden>
+<input type="file" id="image-input" accept="image/*" multiple hidden>
 
 <!-- ============ MODAL: Auto Number ============ -->
 <div class="overlay" id="modal-number">
@@ -496,8 +498,8 @@ kbd{
       <div class="btnrow"><button class="tbtn" id="sig-clear" style="flex:none">Bersihkan</button></div>
     </div>
     <div class="tabpane" data-pane="upload">
-      <div class="dropzone" id="sig-upload-zone">Klik untuk pilih gambar (PNG/JPG, latar transparan disarankan)</div>
-      <div id="sig-upload-preview" style="margin-top:10px;text-align:center"></div>
+      <div class="dropzone" id="sig-upload-zone">Klik untuk pilih satu atau beberapa gambar TTD (PNG/JPG, latar transparan disarankan)</div>
+      <div id="sig-upload-preview" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-height:230px;overflow:auto"></div>
     </div>
     <div class="tabpane" data-pane="preset">
       <div class="stamp-presets" id="stamp-presets">
@@ -586,7 +588,7 @@ TOOLS.forEach(t=>{
   b.className='tool'; b.dataset.tool=t.id; b.title=t.label;
   b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg><span>${t.label}</span>`;
   b.addEventListener('click', ()=>{
-    if(!pdfDoc){ toast('Buka PDF terlebih dahulu'); return; }
+    if(!pdfDoc){ toast('Buka PDF atau gambar terlebih dahulu'); return; }
     if(t.action==='modal-number'){ openNumberModal(); return; }
     if(t.action==='modal-sig-sign'){ openSigModal('sign'); return; }
     if(t.action==='modal-sig-stamp'){ openSigModal('stamp'); return; }
@@ -616,6 +618,41 @@ function setTool(id){
   document.getElementById('status-hint').textContent = hints[id] || '';
 }
 setTool('select');
+
+/* ============================================================
+   GAMBAR → PDF 1 halaman (supaya semua fitur editor bisa dipakai)
+============================================================ */
+const isImageFile = f => /^image\//i.test(f.type||'') || /\.(jpe?g|png|webp|gif|bmp|avif|tiff?|heic|heif)$/i.test(f.name||'');
+const stripExt = n => (n||'').replace(/\.[^.\/]+$/,'');
+async function imageToPdfBytes(f){
+  let bmp;
+  try{ bmp = await createImageBitmap(f); }                       // otomatis menerapkan rotasi EXIF
+  catch(e){
+    bmp = await new Promise((res,rej)=>{
+      const u=URL.createObjectURL(f), im=new Image();
+      im.onload=()=>{ URL.revokeObjectURL(u); res(im); };
+      im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('format gambar tidak didukung browser: '+f.name)); };
+      im.src=u;
+    });
+  }
+  const w0=bmp.width||bmp.naturalWidth, h0=bmp.height||bmp.naturalHeight;
+  const k=Math.min(1, 4000/Math.max(w0,h0));
+  const cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(w0*k)); cv.height=Math.max(1,Math.round(h0*k));
+  const x=cv.getContext('2d');
+  const isJpg=/jpe?g/i.test(f.type||'')||/\.jpe?g$/i.test(f.name||'');
+  if(isJpg){ x.fillStyle='#fff'; x.fillRect(0,0,cv.width,cv.height); }
+  x.drawImage(bmp,0,0,cv.width,cv.height);
+  const blob=await new Promise(r=>cv.toBlob(r, isJpg?'image/jpeg':'image/png', 0.95));
+  const doc=await PDFDocument.create();
+  const buf=await blob.arrayBuffer();
+  const img=isJpg ? await doc.embedJpg(buf) : await doc.embedPng(buf);
+  const sc=842/Math.max(cv.width,cv.height), W=cv.width*sc, H=cv.height*sc;   // ukuran halaman ≈ A4, resolusi gambar tetap penuh
+  const pg=doc.addPage([W,H]); pg.drawImage(img,{x:0,y:0,width:W,height:H});
+  return await doc.save();
+}
+async function fileToPdfBytes(f){
+  return isImageFile(f) ? await imageToPdfBytes(f) : new Uint8Array(await f.arrayBuffer());
+}
 
 /* ============================================================
    FILE OPEN
@@ -1038,7 +1075,7 @@ document.getElementById('num-apply').addEventListener('click', async ()=>{
 const modalSig = document.getElementById('modal-sig');
 let sigMode='sign';
 let sigPad, sigCtx, sigDrawing=false, sigHasInk=false;
-let uploadedImgDataUrl=null, uploadedHasAlpha=false;
+let uploadedImgs=[]; // [{url, hasAlpha}]
 const SIG_BLACK='#111111', SIG_BLUE='#1d4ed8';
 let sigColors={draw:SIG_BLACK, upload:'original'};
 let sigTab='draw';
@@ -1085,11 +1122,21 @@ function refreshSwatches(){
   document.getElementById('sig-sw-orig').style.display = sigTab==='upload' ? 'inline-flex' : 'none';
   document.getElementById('sig-color-row').style.display = (sigTab==='draw'||sigTab==='upload') ? 'block' : 'none';
 }
+let uploadPreviewToken=0;
 async function refreshUploadPreview(){
-  if(!uploadedImgDataUrl) return;
+  const box=document.getElementById('sig-upload-preview');
+  const token=++uploadPreviewToken;
   const c=sigColors.upload;
-  const r = await processImage(uploadedImgDataUrl, c==='original'?null:c);
-  document.getElementById('sig-upload-preview').innerHTML = `<img src="${r.url}" style="max-width:100%;max-height:120px;background:#fff;border:1px solid var(--line);border-radius:6px">`;
+  const results = await Promise.all(uploadedImgs.map(u=>processImage(u.url, c==='original'?null:c)));
+  if(token!==uploadPreviewToken) return;
+  box.innerHTML = results.map((r,i)=>`
+    <div style="position:relative">
+      <img src="${r.url}" style="height:70px;max-width:150px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px;display:block">
+      <button type="button" class="sig-rm" data-i="${i}" title="Hapus" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:none;background:#1e2a38;color:#fff;font-size:12px;line-height:18px;cursor:pointer;padding:0">×</button>
+    </div>`).join('');
+  box.querySelectorAll('.sig-rm').forEach(b=>b.addEventListener('click', ()=>{
+    uploadedImgs.splice(+b.dataset.i,1); refreshUploadPreview();
+  }));
 }
 function setSigColor(c){
   sigColors[sigTab]=c;
@@ -1104,14 +1151,13 @@ document.getElementById('sig-color-custom').addEventListener('input', e=>setSigC
 function openSigModal(mode){
   sigMode=mode;
   sigColors={draw:SIG_BLACK, upload:'original'};
-  uploadedHasAlpha=false;
   document.getElementById('sig-title').textContent = mode==='sign' ? 'Tanda Tangan' : 'Stempel';
   document.getElementById('sig-sub').textContent = mode==='sign'
     ? 'Gambar langsung atau unggah gambar tanda tangan.'
     : 'Pilih stempel siap pakai, buat teks kustom, atau unggah gambar stempel.';
   document.getElementById('tab-preset-btn').style.display = mode==='stamp' ? 'block' : 'none';
   switchSigTab(mode==='stamp' ? 'preset' : 'draw');
-  uploadedImgDataUrl=null;
+  uploadedImgs=[]; uploadPreviewToken++;
   document.getElementById('sig-upload-preview').innerHTML='';
   setTimeout(initSigPad, 30);
   modalSig.classList.add('show');
@@ -1143,15 +1189,17 @@ function initSigPad(){
 document.getElementById('sig-clear').addEventListener('click', ()=>{ sigCtx.clearRect(0,0,sigPad.width,sigPad.height); sigHasInk=false; });
 
 document.getElementById('sig-upload-zone').addEventListener('click', ()=>document.getElementById('image-input').click());
-document.getElementById('image-input').addEventListener('change', (e)=>{
-  const f=e.target.files[0]; if(!f) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    uploadedImgDataUrl = reader.result;
-    processImage(uploadedImgDataUrl, null).then(r=>{ uploadedHasAlpha=r.hasAlpha; refreshUploadPreview(); });
-  };
-  reader.readAsDataURL(f);
-  e.target.value='';
+document.getElementById('image-input').addEventListener('change', async (e)=>{
+  const files=[...e.target.files]; e.target.value='';
+  if(!files.length) return;
+  const readFile=f=>new Promise(res=>{ const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.onerror=()=>res(null); rd.readAsDataURL(f); });
+  for(const f of files){
+    if(!f.type.startsWith('image/')) continue;
+    const url=await readFile(f); if(!url) continue;
+    const r=await processImage(url,null);
+    uploadedImgs.push({url, hasAlpha:r.hasAlpha});
+  }
+  refreshUploadPreview();
 });
 document.querySelectorAll('.stamp-chip').forEach(chip=>{
   chip.addEventListener('click', ()=>{ document.getElementById('stamp-custom').value = chip.dataset.txt; });
@@ -1169,18 +1217,25 @@ document.getElementById('sig-apply').addEventListener('click', ()=>{
       pushHistory();
     });
   } else if(activeTab==='upload'){
-    if(!uploadedImgDataUrl){ toast('Pilih gambar terlebih dahulu'); return; }
+    if(!uploadedImgs.length){ toast('Pilih gambar terlebih dahulu'); return; }
     const upColor = sigColors.upload;
-    processImage(uploadedImgDataUrl, upColor==='original'?null:upColor).then(r=>{
-      fabric.Image.fromURL(r.url, (img)=>{
-        img.set({left:80, top:120,
-          sigColorable: upColor!=='original' || r.hasAlpha,
-          sigColor: upColor==='original' ? null : upColor});
-        img.scaleToWidth(160);
-        fabricCanvas.add(img); fabricCanvas.setActiveObject(img);
-        pushHistory();
-      });
-    });
+    const list = uploadedImgs.slice();
+    (async ()=>{
+      for(let n=0;n<list.length;n++){
+        const r = await processImage(list[n].url, upColor==='original'?null:upColor);
+        await new Promise(done=>{
+          fabric.Image.fromURL(r.url, (img)=>{
+            img.set({left:80+n*30, top:120+n*30,
+              sigColorable: upColor!=='original' || list[n].hasAlpha,
+              sigColor: upColor==='original' ? null : upColor});
+            img.scaleToWidth(160);
+            fabricCanvas.add(img); fabricCanvas.setActiveObject(img);
+            pushHistory(); done();
+          });
+        });
+      }
+      if(list.length>1) toast(list.length+' tanda tangan ditambahkan — geser untuk mengatur posisi');
+    })();
   } else if(activeTab==='preset'){
     const txt = document.getElementById('stamp-custom').value.trim() || 'STEMPEL';
     const color = document.getElementById('stamp-color').value;
@@ -1317,6 +1372,28 @@ function toHex(c){
    source PDF can't be edited directly (e.g. unusual encoding).
 ============================================================ */
 document.getElementById('btn-export').addEventListener('click', (e)=>exportPdf(e));
+document.getElementById('btn-export-img').addEventListener('click', exportImage);
+async function exportImage(){
+  if(!pdfDoc) return toast('Buka PDF atau gambar terlebih dahulu');
+  saveCurrentPageSilently();
+  const fmt=document.getElementById('img-fmt').value==='png'?'png':'jpeg', ext=fmt==='png'?'png':'jpg';
+  toast('Membuat gambar…');
+  try{
+    const bytes=await buildPdf({bytes:originalBytes,doc:pdfDoc,states:pageStates,keep:new Set([currentPage]),crops:cropBoxes,dimsOf:getPageDims});
+    const doc=await pdfjsLib.getDocument({data:bytes}).promise, pg=await doc.getPage(1);
+    const v1=pg.getViewport({scale:1}), scale=Math.min(4, 4000/Math.max(v1.width,v1.height), Math.max(3, 2400/Math.max(v1.width,v1.height)));
+    const vp=pg.getViewport({scale}), cv=document.createElement('canvas'); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
+    const x=cv.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,cv.width,cv.height);
+    await pg.render({canvasContext:x,viewport:vp}).promise;
+    const blob=await new Promise(r=>cv.toBlob(r,'image/'+fmt,0.95));
+    let nm=pickName(destPattern.value.trim()||'{nama}-edit',1,fileLabel);
+    if(numPages>1) nm+='-hal-'+currentPage;
+    nm=nm.replace(/[\\/:*?"<>|]/g,'_').replace(/\.(pdf|jpe?g|png)$/i,'')+'.'+ext;
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nm; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('Gambar diunduh: '+nm);
+  }catch(err){ console.error(err); toast('Gagal ekspor gambar: '+err.message); }
+}
 
 function hexToRgb01(hex){
   if(!hex || hex[0]!=='#'){ hex='#000000'; }
@@ -1646,8 +1723,8 @@ document.getElementById('add-input').addEventListener('change',async(e)=>{
   saveCurrentPageSilently();
   try{
     const A=await PDFDocument.load(originalBytes.slice(0));
-    for(const f of fs){ const B=await PDFDocument.load(await f.arrayBuffer(),{ignoreEncryption:true}); (await A.copyPages(B,B.getPageIndices())).forEach(p=>A.addPage(p)); }
-    await reloadDoc(await A.save(),currentPage); toast(`${fs.length} PDF ditambahkan di akhir — seret thumbnail untuk mengatur urutan`);
+    for(const f of fs){ const B=await PDFDocument.load(await fileToPdfBytes(f),{ignoreEncryption:true}); (await A.copyPages(B,B.getPageIndices())).forEach(p=>A.addPage(p)); }
+    await reloadDoc(await A.save(),currentPage); toast(`${fs.length} file ditambahkan di akhir — seret thumbnail untuk mengatur urutan`);
   }catch(err){ console.error(err); toast('Gagal menambah PDF: '+err.message); }
 });
 
@@ -1682,12 +1759,12 @@ document.getElementById('btn-batch').addEventListener('click',async()=>{
     for(const [i,f] of fs.entries()){
       toast(`Memproses ${i+1}/${fs.length}: ${f.name}`);
       try{
-        const bytes=new Uint8Array(await f.arrayBuffer()), doc=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
+        const bytes=await fileToPdfBytes(f), doc=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
         const T=JSON.parse(tpl); T.objects.forEach(x=>{ if(typeof x.text==='string') x.text=x.text.replace(/\{n\}/g,String(c0+i)); });
         const js=JSON.stringify(T), st={}; for(let n=1;n<=(all?doc.numPages:1);n++) st[n]=js;
         const out=await buildPdf({bytes,doc,states:st,keep:new Set([...Array(doc.numPages)].map((_,k)=>k+1)),crops:{},
           dimsOf:async n=>{ const v=(await doc.getPage(n)).getViewport({scale:1}); return {w:v.width,h:v.height}; }});
-        { const nm=pickName(pat,c0+i,f.name.replace(/\.pdf$/i,'')); await writeOut(dir,out,nm); }
+        { const nm=pickName(pat,c0+i,stripExt(f.name)); await writeOut(dir,out,nm); }
       }catch(err){ console.error(err); toast('Gagal: '+f.name); }
     }
     toast('Batch selesai');
@@ -1699,7 +1776,7 @@ document.getElementById('btn-batch').addEventListener('click',async()=>{
     if(!confirm(`Terapkan objek halaman ini ke ${marked.length} PDF yang ditandai?\n\n(Untuk memilih file lewat dialog, hilangkan dulu semua tanda di daftar berkas.)`)) return;
     return run(marked.map(d=>({name:d.name+'.pdf', arrayBuffer:async()=>d.bytes.slice(0)})));
   }
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='application/pdf'; inp.multiple=true;
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='application/pdf,image/*'; inp.multiple=true;
   inp.onchange=()=>run([...inp.files]);
   inp.click();
 });
@@ -1860,15 +1937,22 @@ async function splitPdfBytes(buf, base){
 }
 async function addFiles(list, activateFirst){
   list=[...list];
-  const pdfs=list.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');
-  const skipped=list.length-pdfs.length;
-  if(!pdfs.length){ toast('Tidak ada file PDF yang terdeteksi'); return; }
-  const added=[]; let splitFiles=0;
+  const ok=list.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf'||isImageFile(f));
+  const skipped=list.length-ok.length;
+  if(!ok.length){ toast('Tidak ada file PDF atau gambar yang terdeteksi'); return; }
+  const added=[]; let splitFiles=0, imgs=0, failed=0;
   const doSplit=document.getElementById('auto-split').checked;
   filesOpen=true;
-  for(const f of pdfs){
+  for(const f of ok){
     try{
-      const buf=await f.arrayBuffer(), base=f.name.replace(/\.pdf$/i,'');
+      const base=stripExt(f.name);
+      if(isImageFile(f)&&!/\.pdf$/i.test(f.name)){
+        toast('Membaca gambar: '+f.name);
+        const bytes=await imageToPdfBytes(f);
+        const d=newDoc(base,bytes); d.pages=1; docs.push(d); added.push(d); imgs++; renderFileList();
+        continue;
+      }
+      const buf=await f.arrayBuffer();
       let parts=null;
       if(doSplit){ try{ parts=await splitPdfBytes(buf,base); }catch(e){ console.error('Gagal memecah',f.name,e); } }
       if(parts){
@@ -1876,9 +1960,9 @@ async function addFiles(list, activateFirst){
         parts.forEach(p=>{ const d=newDoc(p.name,p.bytes); d.pages=1; docs.push(d); added.push(d); });
       } else { const d=newDoc(base,buf); docs.push(d); added.push(d); }
       renderFileList();
-    }catch(err){ console.error(err); }
+    }catch(err){ console.error(err); failed++; }
   }
-  toast(`${added.length} PDF ditambahkan`+(splitFiles?` · ${splitFiles} file dipecah per halaman`:'')+(skipped?` · ${skipped} non-PDF diabaikan`:''));
+  toast(`${added.length} file ditambahkan`+(imgs?` (${imgs} gambar)`:'')+(splitFiles?` · ${splitFiles} PDF dipecah per halaman`:'')+(skipped?` · ${skipped} file lain diabaikan`:'')+(failed?` · ${failed} gagal dibaca`:''));
   if(activateFirst||!pdfDoc){
     for(const d of added){ await activateDoc(d.id); if(pdfDoc&&activeId===d.id) break; }
   }
