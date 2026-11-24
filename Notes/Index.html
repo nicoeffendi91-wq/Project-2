@@ -9,12 +9,12 @@
 :root{
   box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
   --bg:#eef2f4;--card:#fff;--ink:#1b2a33;--mute:#5d6e78;--line:#d5dde2;--accent:#0f6b73;--accent-ink:#fff;
-  --ok:#17794a;--ok-bg:#dff3e7;--bad:#b3322d;--bad-bg:#fbe3e1;--wait:#6b5a12;--wait-bg:#f6efc9;
+  --ok:#17794a;--ok-bg:#dff3e7;--bad:#b3322d;--bad-bg:#fbe3e1;--wait:#6b5a12;--wait-bg:#f6efc9;--lec:#6a4fb3;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#12191d;--card:#1b262c;--ink:#e6edf0;--mute:#93a5ae;--line:#2c3b43;--accent:#4fb7bf;--accent-ink:#0c1a1d;
-  --ok:#6fd49b;--ok-bg:#183a29;--bad:#ff938d;--bad-bg:#42201e;--wait:#e8d377;--wait-bg:#3a3414;}}
-:root[data-theme="dark"]{--bg:#12191d;--card:#1b262c;--ink:#e6edf0;--mute:#93a5ae;--line:#2c3b43;--accent:#4fb7bf;--accent-ink:#0c1a1d;--ok:#6fd49b;--ok-bg:#183a29;--bad:#ff938d;--bad-bg:#42201e;--wait:#e8d377;--wait-bg:#3a3414}
+  --ok:#6fd49b;--ok-bg:#183a29;--bad:#ff938d;--bad-bg:#42201e;--wait:#e8d377;--wait-bg:#3a3414;--lec:#b7a2ff;}}
+:root[data-theme="dark"]{--bg:#12191d;--card:#1b262c;--ink:#e6edf0;--mute:#93a5ae;--line:#2c3b43;--accent:#4fb7bf;--accent-ink:#0c1a1d;--ok:#6fd49b;--ok-bg:#183a29;--bad:#ff938d;--bad-bg:#42201e;--wait:#e8d377;--wait-bg:#3a3414;--lec:#b7a2ff}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -25,7 +25,7 @@ h1{font-size:22px;margin:0 0 2px;font-weight:700}
 @media(min-width:1000px){.grid{grid-template-columns:540px 1fr;align-items:start}.form-card{position:sticky;top:16px}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
 .tabs{display:flex;gap:6px;margin-bottom:14px;background:var(--bg);padding:4px;border-radius:10px}
-.tabs button{flex:1;border:0;background:transparent;color:var(--mute);padding:9px 6px;border-radius:7px;font:600 13px inherit;font-family:inherit;cursor:pointer}
+.tabs button{flex:1;border:0;background:transparent;color:var(--mute);padding:9px 3px;border-radius:7px;font:600 13px inherit;font-family:inherit;cursor:pointer}
 .tabs button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
 label{display:block;font-weight:600;font-size:13px;margin:12px 0 5px}
 input,textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
@@ -68,6 +68,7 @@ textarea{min-height:84px;resize:vertical}
 .note[data-t="kerja"]{border-left-color:var(--mute)}
 .note[data-t="cek"]{border-left-color:var(--accent)}
 .note[data-t="rapat"]{border-left-color:var(--wait)}
+.note[data-t="lecture"]{border-left-color:var(--lec)}
 .note h3{margin:0;font-size:16px;font-weight:600}
 .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--mute);font-size:12.5px;margin-bottom:6px}
 .badge{padding:2px 9px;border-radius:99px;font-weight:600;font-size:12px}
@@ -95,12 +96,13 @@ textarea{min-height:84px;resize:vertical}
         <button type="button" data-t="kerja" aria-pressed="true">Pekerjaan</button>
         <button type="button" data-t="cek" aria-pressed="false">Pengecekan</button>
         <button type="button" data-t="rapat" aria-pressed="false">Rapat</button>
+        <button type="button" data-t="lecture" aria-pressed="false">Lecture</button>
       </div>
       <label for="judul" style="margin-top:0">Judul</label>
       <input id="judul" placeholder="Contoh: Rekap surat masuk">
       <div class="row">
         <div><label for="tgl">Tanggal</label><input id="tgl" type="date"></div>
-        <div class="f-rapat hide"><label for="peserta">Peserta</label><input id="peserta" placeholder="Nama, nama"></div>
+        <div class="f-rapat hide"><label for="peserta" id="lPeserta">Peserta</label><input id="peserta" placeholder="Nama, nama"></div>
       </div>
       <div class="f-cek hide">
         <label>Hasil pengecekan</label>
@@ -109,13 +111,13 @@ textarea{min-height:84px;resize:vertical}
         <div class="hint">Klik tombol status untuk mengganti (Belum, Valid, Tidak valid). Salin kolom dari Excel lalu tempel di kolom Uraian, baris terisi otomatis.</div>
       </div>
       <div class="f-rapat hide">
-        <label for="agenda">Agenda</label>
+        <label for="agenda" id="lAgenda">Agenda</label>
         <input id="agenda" placeholder="Topik yang dibahas">
       </div>
       <label for="isi" id="isiLabel">Catatan</label>
       <textarea id="isi" placeholder="Tulis catatan di sini"></textarea>
       <div class="f-rapat hide">
-        <label for="tindak">Keputusan dan tindak lanjut</label>
+        <label for="tindak" id="lTindak">Keputusan dan tindak lanjut</label>
         <textarea id="tindak" placeholder="Siapa mengerjakan apa, sampai kapan"></textarea>
       </div>
       <div class="actions">
@@ -131,6 +133,7 @@ textarea{min-height:84px;resize:vertical}
         <button type="button" data-f="kerja" aria-pressed="false">Pekerjaan</button>
         <button type="button" data-f="cek" aria-pressed="false">Pengecekan</button>
         <button type="button" data-f="rapat" aria-pressed="false">Rapat</button>
+        <button type="button" data-f="lecture" aria-pressed="false">Lecture</button>
       </div>
       <div id="list"></div>
     </section>
@@ -141,7 +144,7 @@ textarea{min-height:84px;resize:vertical}
 <script>
 (function(){
   var KEY="catatan-kerja-v1", notes=[], tipe="kerja", rows=[], filter="semua", editId=null;
-  var NAMA={kerja:"Pekerjaan",cek:"Pengecekan",rapat:"Rapat"};
+  var NAMA={kerja:"Pekerjaan",cek:"Pengecekan",rapat:"Rapat",lecture:"Lecture"};
   var LBL={valid:"Valid",tidak:"Tidak valid",belum:"Belum dicek"};
   var $=function(id){return document.getElementById(id)};
 
@@ -155,8 +158,13 @@ textarea{min-height:84px;resize:vertical}
     tipe=t;
     [].forEach.call($("tabs").children,function(b){b.setAttribute("aria-pressed",b.dataset.t===t)});
     [].forEach.call(document.querySelectorAll(".f-cek"),function(e){e.classList.toggle("hide",t!=="cek")});
-    [].forEach.call(document.querySelectorAll(".f-rapat"),function(e){e.classList.toggle("hide",t!=="rapat")});
-    $("isiLabel").textContent=t==="rapat"?"Pembahasan":t==="cek"?"Catatan tambahan":"Catatan";
+    [].forEach.call(document.querySelectorAll(".f-rapat"),function(e){e.classList.toggle("hide",t!=="rapat"&&t!=="lecture")});
+    var lec=t==="lecture";
+    $("isiLabel").textContent=lec?"Catatan kuliah":t==="rapat"?"Pembahasan":t==="cek"?"Catatan tambahan":"Catatan";
+    $("lPeserta").textContent=lec?"Dosen / pengajar":"Peserta";$("peserta").placeholder=lec?"Nama dosen":"Nama, nama";
+    $("lAgenda").textContent=lec?"Mata kuliah":"Agenda";$("agenda").placeholder=lec?"Contoh: Basis Data, pertemuan 5":"Topik yang dibahas";
+    $("lTindak").textContent=lec?"Poin penting dan tugas":"Keputusan dan tindak lanjut";
+    $("tindak").placeholder=lec?"Rangkuman, istilah penting, tugas dan tenggatnya":"Siapa mengerjakan apa, sampai kapan";
     if(t==="cek"&&!rows.length)addRows(5);
   }
   var ORDER=["belum","valid","tidak"], SHORT={belum:"Belum",valid:"Valid",tidak:"Tidak valid"};
@@ -263,9 +271,9 @@ textarea{min-height:84px;resize:vertical}
       } else if(n.tipe==="cek"&&n.status)m.appendChild(el("span","badge b-"+n.status,LBL[n.status]));
       m.appendChild(el("span",null,fmt(n.tgl)));
       c.appendChild(m);c.appendChild(el("h3",null,n.judul||"(Tanpa judul)"));
-      [n.tipe==="cek"&&n.rows&&n.rows.length?listTable(n):null,field("Peserta",n.peserta),field("Agenda",n.agenda),
-       field(n.tipe==="rapat"?"Pembahasan":n.tipe==="cek"?(n.rows&&n.rows.length?"Catatan tambahan":"Hasil pengecekan"):"Catatan",n.isi),
-       field("Keputusan dan tindak lanjut",n.tindak)].forEach(function(f){if(f)c.appendChild(f)});
+      [n.tipe==="cek"&&n.rows&&n.rows.length?listTable(n):null,field(n.tipe==="lecture"?"Dosen":"Peserta",n.peserta),field(n.tipe==="lecture"?"Mata kuliah":"Agenda",n.agenda),
+       field(n.tipe==="lecture"?"Catatan kuliah":n.tipe==="rapat"?"Pembahasan":n.tipe==="cek"?(n.rows&&n.rows.length?"Catatan tambahan":"Hasil pengecekan"):"Catatan",n.isi),
+       field(n.tipe==="lecture"?"Poin penting dan tugas":"Keputusan dan tindak lanjut",n.tindak)].forEach(function(f){if(f)c.appendChild(f)});
       var a=el("div","nact");
       var e=el("button",null,"Ubah");e.type="button";e.onclick=function(){edit(n.id)};
       var d=el("button","del","Hapus");d.type="button";d.onclick=function(){hapus(n.id)};
