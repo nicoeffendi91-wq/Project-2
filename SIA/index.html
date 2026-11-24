@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SIA — Administrasi Keuangan</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--n:#191970;--d:#102A43;--t:#168C8C;--bg:#f4f6fa;--ink:#172334;--muted:#718096;--line:#e5eaf0;--red:#b93838;--green:#16845b;--amber:#a66b12}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px "Segoe UI",Arial,sans-serif}.app{display:flex;min-height:100vh}.side{width:230px;background:var(--d);color:white;padding:22px 14px;flex-shrink:0}.brand{font-size:19px;font-weight:800;padding:5px 10px 26px}.brand small{display:block;font-size:11px;color:#aec0d0;font-weight:400}.nav button{display:block;width:100%;border:0;background:none;color:#cbd5e1;text-align:left;padding:11px;border-radius:8px;margin:3px 0;cursor:pointer}.nav button.active,.nav button:hover{background:#ffffff20;color:white}.navlabel{font-size:10px;letter-spacing:1px;color:#8fa8bc;padding:15px 10px 5px}.main{flex:1;min-width:0}.top{height:62px;background:white;border-bottom:1px solid var(--line);padding:20px 28px;color:var(--muted);font-size:12px}.content{padding:26px;max-width:1450px;margin:auto}.page{display:none}.page.active{display:block}.head{display:flex;justify-content:space-between;gap:12px;align-items:start;margin-bottom:20px}.head h1{font-size:23px;color:var(--d);margin:0 0 5px}.head p{font-size:12px;color:var(--muted);margin:0}.btn{border:0;border-radius:8px;padding:10px 13px;font-size:12px;font-weight:700;cursor:pointer}.primary{background:var(--n);color:white}.soft{background:#edf1f7;color:var(--d);border:1px solid var(--line)}.danger{background:#fff0f0;color:var(--red)}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}.card,.panel{background:white;border:1px solid var(--line);border-radius:11px}.card{padding:16px}.card small{font-size:10px;color:var(--muted)}.card strong{display:block;font-size:25px;color:var(--d);margin:7px 0}.panel{margin-bottom:17px;overflow:hidden}.ph{padding:15px 18px;border-bottom:1px solid var(--line);font-weight:700;font-size:14px;color:var(--d)}.pb{padding:17px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.notice{padding:12px 14px;border-radius:9px;background:#edf6f8;border:1px solid #d5e8eb;color:#315b65;font-size:11px;margin-bottom:15px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:13px}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:11px;font-weight:700;color:#536274}.input,select,textarea{width:100%;border:1px solid #dbe2ea;border-radius:8px;padding:9px 10px;font-size:12px;background:white;color:var(--ink)}.search{flex:1;min-width:180px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.full{grid-column:1/-1}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th{text-align:left;background:#f8fafc;color:#718096;font-size:10px;padding:11px}td{padding:11px;border-top:1px solid #edf0f4;font-size:11px}.tag{display:inline-block;border-radius:20px;padding:4px 8px;font-size:10px;font-weight:700;background:#eef1f5;color:#596779}.ok{background:#e5f5ec;color:#13734c}.warn{background:#fff3dc;color:#94600d}.bad{background:#ffeded;color:#ae3030}.empty{text-align:center;color:var(--muted);padding:28px}.modalbg{display:none;position:fixed;inset:0;background:#0b1b2e88;z-index:9;align-items:center;justify-content:center;padding:15px}.modal{width:min(820px,100%);max-height:94vh;overflow:auto;background:white;border-radius:13px}.mh{padding:17px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}.mh h2{margin:0;font-size:16px}.mb{padding:19px}.x{border:0;background:none;font-size:22px;cursor:pointer}.ma{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:15px}.tabs button{border:1px solid var(--line);background:white;padding:8px 11px;border-radius:7px;font-size:11px}.tabs button.active{background:var(--n);color:white}.pane{display:none}.pane.active{display:block}.checkgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.checkgrid label{border:1px solid var(--line);padding:9px;border-radius:8px;font-size:11px}.muted{color:var(--muted);font-size:10px;display:block;margin-top:3px}.foot{text-align:center;color:#8b96a5;font-size:10px;padding:15px}
+@media(max-width:950px){.cards{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.side{width:58px;padding:15px 5px}.brand{font-size:0;padding:5px}.brand small,.navlabel,.navtext{display:none}.nav button{text-align:center;padding:12px 2px;font-size:0}.nav button:first-letter{font-size:16px}.content{padding:18px 12px}.top{padding:20px 14px}.cards{grid-template-columns:repeat(2,1fr)}.grid2,.formgrid,.checkgrid{grid-template-columns:1fr}.full{grid-column:auto}.head{flex-direction:column}}
+
+/* Spreadsheet-style input matching the office workbook */
+.quick-grid{margin:14px 0;border:1px solid #9aa8b5;border-radius:5px;overflow:hidden;background:#fff;color:#111}
+.quick-grid .qhead{padding:12px 14px;border-bottom:1px solid #c7d0d9;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f4f6f8;color:#172334}
+.quick-grid .qscroll{overflow:auto;max-height:65vh;overscroll-behavior:contain}
+.quick-grid table.qsheet{min-width:3500px;width:max-content;border-collapse:collapse;table-layout:fixed;white-space:normal}
+.quick-grid .qsheet th{position:sticky;top:0;z-index:2;background:#102a43;color:#fff;text-align:left;font-size:11px;white-space:normal;line-height:1.25;padding:8px 7px;border:1px solid #536b80;height:34px}
+.quick-grid .qsheet th:first-child{left:0;z-index:4}
+.quick-grid .qsheet td{padding:0;border:1px solid #aeb8c2;height:34px;background:#fff;vertical-align:top}
+.quick-grid .qsheet td.q-no{position:sticky;left:0;z-index:1;background:#edf1f5;text-align:center;font-size:11px;padding:9px 4px;color:#34495e}
+.quick-grid .qsheet td input{display:block;width:100%;min-width:0;height:100%;min-height:34px;border:0;border-radius:0;padding:8px 6px;background:#fff;color:#111;font:12px "Segoe UI",Arial,sans-serif;outline:none}
+.quick-grid .qsheet td input:focus{outline:2px solid #217346;outline-offset:-2px;background:#f3fff6}
+.quick-grid .qsheet td.q-code-cell input{background:#fff89a;color:#111}
+.quick-grid .qsheet td.q-code-cell input:focus{background:#fffde0}
+.quick-grid .qsheet td input[type=date]{min-width:125px}
+.quick-grid .qsheet td input[inputmode=numeric]{text-align:right}
+.quick-grid .qsheet td.q-actions{position:sticky;right:0;background:#f7f9fb;padding:4px;white-space:nowrap;z-index:1}
+.quick-grid .q-actions .btn{margin:2px;padding:8px 9px}
+.quick-grid .qhint{font-size:11px;color:#526170;padding:10px 14px;line-height:1.6;background:#f7f9fb;border-top:1px solid #c7d0d9}
+</style></head><body>
+<div class="app"><aside class="side"><div class="brand">SIA<small>Sistem Informasi Administrasi</small></div><div class="navlabel">MENU UTAMA</div><nav class="nav">
+<button class="active" data-p="dashboard">▦　Dashboard</button><button data-p="transactions">▤　Master Transaksi</button><button data-p="payment">⇄　Payment Control</button><button data-p="tax">％　Kalkulator Pajak</button><button data-p="reconcile">◎　Rekonsiliasi</button><button data-p="monthly">▥　Rekap Bulanan</button><button data-p="export">⇩　Export Excel</button><button data-p="import">⇧　Import Excel</button><div class="navlabel">PENGENDALIAN</div><button data-p="settings">⚙　Checklist & Aturan</button><button data-p="audit">≡　Audit Trail</button></nav></aside>
+<main class="main"><header class="top">SIA / <b id="crumb">Dashboard</b></header><div class="content">
+<section class="page active" id="p-dashboard"><div class="head"><div><h1>Dashboard</h1><p>Ringkasan administrasi, pembayaran, dan validasi.</p></div><button class="btn primary" onclick="openTx()">＋ Transaksi Baru</button></div>
+<div class="cards"><div class="card"><small>TOTAL TRANSAKSI</small><strong id="c0">0</strong></div><div class="card"><small>MENUNGGU VERIFIKASI</small><strong id="c1">0</strong></div><div class="card"><small>POTENSI DUPLIKAT</small><strong id="c2">0</strong></div><div class="card"><small>MENUNGGU TRANSFER</small><strong id="c3">0</strong></div><div class="card"><small>SELESAI</small><strong id="c4">0</strong></div></div>
+<div class="grid2"><div class="panel"><div class="ph">Ringkasan proses</div><div class="pb" id="summary"></div></div><div class="panel"><div class="ph">Peringatan</div><div class="pb" id="alerts"></div></div></div>
+<div class="panel"><div class="ph">Transaksi terbaru</div><div class="tablewrap"><table><thead><tr><th>REGISTRASI</th><th>NAMA / KEGIATAN</th><th>BRUTO</th><th>REALISASI</th><th>STATUS</th></tr></thead><tbody id="recent"></tbody></table></div></div></section>
+<section class="page" id="p-transactions"><div class="head"><div><h1>Master Transaksi</h1><p>Satu baris mewakili satu transaksi atau berkas.</p></div><button class="btn primary" onclick="openTx()">＋ Input Manual</button></div><div class="panel"><div class="pb"><div class="toolbar"><input class="input search" id="search" placeholder="Cari nama, nomor, kegiatan, rekening..." oninput="render()"><select id="filter" onchange="render()"><option value="">Semua jenis</option><option>Pengadaan</option><option>Perjalanan Dinas</option><option>Honorarium</option><option>Lainnya</option></select><select id="transactionMonth" onchange="render()"><option value="">Semua bulan</option></select><button class="btn primary" onclick="toggleQuickGrid()">＋ Input seperti Excel</button><button class="btn soft" onclick="exportData()">Export CSV</button></div><div id="quickGrid" class="quick-grid" style="display:none"></div><div class="tablewrap"><table><thead><tr><th>REGISTRASI</th><th>TANGGAL</th><th>JENIS / AKTIVITAS</th><th>NAMA</th><th>BRUTO</th><th>REALISASI AKTUAL</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="rows"></tbody></table></div></div></div></section>
+<section class="page" id="p-payment"><div class="head"><div><h1>Payment Control</h1><p>Validasi sebelum transfer dan pencatatan transfer aktual.</p></div></div><div class="notice">SIA tidak mengirim uang ke bank. Sistem ini membantu pemeriksaan, pencatatan, dan pemantauan; keputusan pembayaran tetap mengikuti prosedur dan kewenangan resmi.</div><div class="panel"><div class="ph">Daftar pemeriksaan pembayaran</div><div class="tablewrap"><table><thead><tr><th>REGISTRASI / PENERIMA</th><th>BRUTO</th><th>PAJAK</th><th>BERSIH RENCANA</th><th>PEMERIKSAAN</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody id="payrows"></tbody></table></div></div></section>
+<section class="page" id="p-tax"><div class="head"><div><h1>Kalkulator Pajak</h1><p>Hitung ulang dan bandingkan dengan angka pada dokumen fisik.</p></div><button class="btn primary" onclick="openRule()">＋ Aturan Pajak</button></div><div class="notice">Aturan bawaan bukan tarif resmi. Admin harus memasukkan tarif, DPP, objek, kondisi penerima, dan masa berlaku yang telah diverifikasi. Perhitungan ini merupakan alat bantu, bukan penetapan pajak.</div><div class="panel"><div class="ph">Simulasi kalkulasi</div><div class="pb"><div class="formgrid"><div class="field"><label>Jenis pajak</label><select id="taxType" onchange="calc()"><option>PPh 21</option><option>PPh 22</option><option>PPh 23</option><option>PPN</option></select></div><div class="field"><label>Aturan</label><select id="taxRule" onchange="calc()"></select></div><div class="field"><label>Dasar pengenaan (Rp)</label><input class="input" id="base" type="number" value="5000000" oninput="calc()"></div><div class="field"><label>Pajak pada dokumen fisik (Rp)</label><input class="input" id="physical" type="number" value="0" oninput="calc()"></div></div><div class="grid2" style="margin-top:15px"><div class="card"><small>HASIL KALKULASI SIA</small><strong id="result">Rp0</strong></div><div class="card"><small>SELISIH DENGAN DOKUMEN</small><strong id="difference">Rp0</strong><span id="match" class="muted"></span></div></div></div></div><div class="panel"><div class="ph">Aturan pajak yang dikonfigurasi</div><div class="tablewrap"><table><thead><tr><th>JENIS</th><th>NAMA ATURAN</th><th>TARIF</th><th>DPP</th><th>MASA BERLAKU</th><th>AKSI</th></tr></thead><tbody id="rules"></tbody></table></div></div></section>
+<section class="page" id="p-reconcile"><div class="head"><div><h1>Rekonsiliasi</h1><p>Bandingkan bruto, pajak, realisasi bersih rencana, dan transfer aktual.</p></div></div><div class="panel"><div class="tablewrap"><table><thead><tr><th>REGISTRASI / NAMA</th><th>BRUTO</th><th>TOTAL PAJAK</th><th>BERSIH MENURUT SIA</th><th>TRANSFER AKTUAL</th><th>SELISIH</th><th>HASIL</th></tr></thead><tbody id="recon"></tbody></table></div></div></section>
+
+<section class="page" id="p-monthly">
+<div class="head"><div><h1>Rekapitulasi Bulanan</h1><p>Akumulasi bruto, seluruh komponen pajak, realisasi bersih, dan jumlah transaksi per bulan.</p></div><button class="btn soft" onclick="exportMonthly()">Export Rekap CSV</button></div>
+<div class="panel"><div class="pb"><div class="toolbar"><select id="monthYear" onchange="renderMonthly()"><option value="">Semua tahun</option></select><select id="monthPeriod" onchange="renderMonthly()"><option value="">Semua bulan</option></select><select id="monthKind" onchange="renderMonthly()"><option value="">Semua jenis berkas</option><option>Pengadaan</option><option>Perjalanan Dinas</option><option>Honorarium</option><option>Lainnya</option></select></div>
+<div class="cards" style="grid-template-columns:repeat(5,minmax(120px,1fr))">
+<div class="card"><small>TOTAL BRUTO</small><strong id="mGross">Rp0</strong></div>
+<div class="card"><small>TOTAL PPH 21</small><strong id="mP21">Rp0</strong></div>
+<div class="card"><small>TOTAL PPH 22</small><strong id="mP22">Rp0</strong></div>
+<div class="card"><small>TOTAL PPH 23</small><strong id="mP23">Rp0</strong></div>
+<div class="card"><small>TOTAL PPN</small><strong id="mVat">Rp0</strong></div>
+</div>
+<div class="cards" style="grid-template-columns:repeat(3,minmax(120px,1fr))">
+<div class="card"><small>TOTAL SELURUH PAJAK</small><strong id="mTax">Rp0</strong></div>
+<div class="card"><small>REALISASI BERSIH RENCANA</small><strong id="mNet">Rp0</strong></div>
+<div class="card"><small>TRANSFER AKTUAL</small><strong id="mActual">Rp0</strong></div>
+</div></div></div>
+<div class="panel"><div class="pb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div><b id="periodStatus">Status periode: —</b><span class="muted">Periode ditutup mengunci transaksi dari tambah, edit, dan hapus.</span></div><button class="btn danger" id="periodToggle" onclick="togglePeriod()">Tutup Bulan</button></div></div><div class="panel"><div class="ph">Rincian per bulan</div><div class="tablewrap"><table><thead><tr><th>BULAN</th><th>JUMLAH TRANSAKSI</th><th>TOTAL BRUTO</th><th>PPH 21</th><th>PPH 22</th><th>PPH 23</th><th>PPN</th><th>TOTAL PAJAK</th><th>BERSIH RENCANA</th><th>TRANSFER AKTUAL</th></tr></thead><tbody id="monthlyRows"></tbody><tfoot id="monthlyFoot"></tfoot></table></div></div>
+<div class="panel"><div class="ph">Rincian transaksi pada bulan terpilih</div><div class="tablewrap"><table><thead><tr><th>REGISTRASI</th><th>TANGGAL</th><th>JENIS</th><th>NAMA / KEGIATAN</th><th>BRUTO</th><th>PPH 21</th><th>PPH 22</th><th>PPH 23</th><th>PPN</th><th>REALISASI</th></tr></thead><tbody id="monthlyDetail"></tbody></table></div></div>
+</section>
+
+<section class="page" id="p-export"><div class="head"><div><h1>Export Excel</h1><p>Unduh data SIA dalam format Microsoft Excel (.xlsx).</p></div></div>
+<div class="notice">File Excel dapat dibuka dan diolah kembali melalui Microsoft Excel atau LibreOffice. Pastikan library Excel sudah termuat; fitur ini memerlukan koneksi internet saat pertama kali memuat halaman.</div>
+<div class="grid2">
+<div class="panel"><div class="ph">Export seluruh data</div><div class="pb"><p>Berisi beberapa sheet: seluruh transaksi, rekap bulanan, rincian transaksi bulanan, dan audit trail.</p><button class="btn primary" onclick="exportWorkbook()">⇩ Unduh Semua Data (.xlsx)</button></div></div>
+<div class="panel"><div class="ph">Export khusus transaksi</div><div class="pb"><p>Hanya mengunduh daftar transaksi beserta nilai bruto, pajak, realisasi, status verifikasi, dan informasi transfer.</p><button class="btn soft" onclick="exportTransactionsXlsx()">⇩ Unduh Transaksi (.xlsx)</button></div></div>
+</div>
+<div class="panel"><div class="ph">Catatan penggunaan</div><div class="pb" style="font-size:12px;line-height:1.8">• Export membuat salinan data, tidak menghapus atau mengubah data di aplikasi.<br>• Data yang diekspor berasal dari penyimpanan browser ini.<br>• Untuk backup rutin, simpan file hasil export di lokasi kantor yang memiliki akses terbatas.</div></div>
+</section>
+<section class="page" id="p-import"><div class="head"><div><h1>Import Excel</h1><p>Impor database lama, periksa hasilnya, lalu konfirmasi.</p></div></div><div class="notice">Mendukung .xlsx, .xls, dan .csv. Pembaca Excel dimuat dari CDN sehingga perlu internet saat menggunakan fitur ini. Data lama tidak ditimpa. Periksa hasil pemetaan karena format tanggal dan angka dari Excel dapat berbeda.</div><div class="panel"><div class="pb"><div class="field"><label>Pilih file Excel / CSV</label><input class="input" type="file" id="file" accept=".xlsx,.xls,.csv"></div><div style="margin-top:12px;display:flex;gap:8px"><button class="btn primary" onclick="readExcel()">Baca & Periksa</button><button class="btn soft" onclick="template()">Unduh Template CSV</button></div><div id="preview" style="margin-top:15px"></div></div></div></section>
+<section class="page" id="p-settings"><div class="head"><div><h1>Checklist & Aturan</h1><p>Checklist umum dapat disesuaikan untuk kebutuhan pemeriksaan.</p></div><button class="btn primary" onclick="addCheck()">＋ Item Checklist</button></div><div class="notice">Untuk setiap item, petugas dapat memilih Lengkap, Tidak Lengkap, atau Tidak Berlaku. Jika Tidak Berlaku, alasan dicatat pada catatan transaksi.</div><div class="panel"><div class="ph">Checklist umum</div><div class="pb" id="checks"></div></div><div class="panel"><div class="ph">Kebijakan duplikasi</div><div class="pb" style="font-size:12px">SIA hanya memberikan peringatan. Petugas meninjau transaksi pembanding dan mencatat hasil: Tidak Duplikat, Duplikat Terkonfirmasi, Berkas Pengganti, Asli Ditemukan, atau Perlu Klarifikasi.</div></div></section>
+<section class="page" id="p-audit"><div class="head"><div><h1>Audit Trail</h1><p>Riwayat tindakan yang dicatat pada browser ini.</p></div><button class="btn soft" onclick="exportAudit()">Export Riwayat</button></div><div class="panel"><div class="tablewrap"><table><thead><tr><th>WAKTU</th><th>AKTIVITAS</th><th>REFERENSI</th><th>DETAIL</th></tr></thead><tbody id="auditrows"></tbody></table></div></div></section>
+<div class="foot">SIA • Penyimpanan lokal browser. Backup data secara berkala melalui menu Export Excel.</div></div></main></div>
+
+<div class="modalbg" id="txmodal"><div class="modal"><div class="mh"><h2 id="modtitle">Input Transaksi</h2><button class="x" onclick="closeM('txmodal')">×</button></div><form class="mb" id="txform"><input type="hidden" id="id"><div class="tabs"><button type="button" class="active" data-tab="a">Identitas</button><button type="button" data-tab="b">Biaya & Pajak</button><button type="button" data-tab="c">Kontrol & Transfer</button><button type="button" data-tab="d">Checklist</button></div>
+<div class="pane active" id="pane-a"><div class="formgrid">
+<div class="field"><label>Tanggal diterima *</label><input class="input" id="date" type="date" required></div><div class="field"><label>Bulan</label><input class="input" id="month"></div>
+<div class="field"><label>Jenis berkas *</label><select id="kind"><option>Pengadaan</option><option>Perjalanan Dinas</option><option>Honorarium</option><option>Lainnya</option></select></div><div class="field"><label>Jenis transaksi</label><select id="trx"><option>GU</option><option>LS</option><option>TU</option><option>UP</option><option>Lainnya</option></select></div>
+<div class="field"><label>KODE</label><input class="input" id="code"></div><div class="field"><label>Kode sub kegiatan</label><input class="input" id="subcode"></div><div class="field"><label>Kode rekening</label><input class="input" id="account"></div><div class="field"><label>Nomor dokumen / kuitansi</label><input class="input" id="docno"></div>
+<div class="field"><label>Nama penerima / tujuan</label><input class="input" id="recipient"></div><div class="field"><label>Nomor rekening penerima</label><input class="input" id="bank"></div>
+<div class="field full"><label>Aktivitas / nama kegiatan *</label><input class="input" id="activity" required></div><div class="field full"><label>Uraian transaksi</label><textarea id="description" rows="2"></textarea></div>
+<div class="field"><label>Tanggal kegiatan / uraian</label><input class="input" id="activityDate" type="date"></div><div class="field"><label>Periode</label><input class="input" id="period"></div><div class="field full"><label>Uraian SIPD</label><textarea id="sipd" rows="2"></textarea></div>
+</div></div>
+<div class="pane" id="pane-b"><div class="formgrid">
+<div class="field"><label>Honor (Rp)</label><input class="input" id="honor" type="number" min="0" value="0"></div><div class="field"><label>UH (Rp)</label><input class="input" id="uh" type="number" min="0" value="0"></div><div class="field"><label>Transportasi BBM + e-Toll (Rp)</label><input class="input" id="transport" type="number" min="0" value="0"></div><div class="field"><label>Pesawat (Rp)</label><input class="input" id="plane" type="number" min="0" value="0"></div><div class="field"><label>Penginapan (Rp)</label><input class="input" id="hotel" type="number" min="0" value="0"></div><div class="field"><label>Other (Rp)</label><input class="input" id="other" type="number" min="0" value="0"></div><div class="field"><label>Pengadaan (Rp)</label><input class="input" id="procurement" type="number" min="0" value="0"></div><div class="field"><label>Bruto / Total (Rp) *</label><input class="input" id="gross" type="number" min="0" value="0" required></div>
+<div class="field"><label>PPh 21 fisik (Rp)</label><input class="input" id="p21" type="number" min="0" value="0"></div><div class="field"><label>PPh 22 fisik (Rp)</label><input class="input" id="p22" type="number" min="0" value="0"></div><div class="field"><label>PPh 23 fisik (Rp)</label><input class="input" id="p23" type="number" min="0" value="0"></div><div class="field"><label>PPN fisik (Rp)</label><input class="input" id="vat" type="number" min="0" value="0"></div><div class="field"><label>Total pajak hasil hitung SIA (Rp)</label><input class="input" id="taxcalc" type="number" min="0" value="0"></div><div class="field"><label>Realisasi bersih rencana (Rp)</label><input class="input" id="net" type="number" min="0" value="0"></div><div class="field full"><div class="notice">Nilai pajak dokumen dan hasil hitung SIA disimpan terpisah. Tidak semua pajak berlaku pada setiap transaksi.</div></div>
+</div></div>
+<div class="pane" id="pane-c"><div class="formgrid">
+<div class="field"><label>Status verifikasi</label><select id="verification"><option>Belum Diperiksa</option><option>Perlu Perbaikan</option><option>Lengkap</option></select></div><div class="field"><label>Hasil tinjauan duplikasi</label><select id="dupstatus"><option>Belum Ditinjau</option><option>Tidak Duplikat</option><option>Duplikat Terkonfirmasi</option><option>Berkas Pengganti</option><option>Asli Ditemukan</option><option>Perlu Klarifikasi</option></select></div>
+<div class="field"><label>Status transfer</label><select id="transfer"><option>Belum</option><option>Disetujui</option><option>Sudah</option><option>Gagal</option></select></div><div class="field"><label>Tanggal transfer</label><input class="input" id="transferDate" type="date"></div>
+<div class="field"><label>Realisasi aktual ditransfer (Rp)</label><input class="input" id="actual" type="number" min="0" value="0"></div><div class="field"><label>Nomor bukti / referensi transfer</label><input class="input" id="reference"></div>
+<div class="field"><label>Status input SIPD</label><select id="sipdstatus"><option>Belum</option><option>Sudah</option><option>Perlu Koreksi</option></select></div><div class="field"><label>Status input pajak</label><select id="taxstatus"><option>Belum</option><option>Sudah</option><option>Tidak Berlaku</option></select></div>
+<div class="field"><label>Petugas pemeriksa 1</label><input class="input" id="checker1"></div><div class="field"><label>Petugas pemeriksa 2</label><input class="input" id="checker2"></div><div class="field full"><label>Catatan / alasan koreksi / klarifikasi</label><textarea id="notes" rows="3"></textarea></div>
+</div></div>
+<div class="pane" id="pane-d"><p style="font-size:11px;color:var(--muted)">Pilih status untuk setiap item. Gunakan Tidak Berlaku jika memang tidak relevan, dan tuliskan alasannya pada catatan.</p><div class="checkgrid" id="checkinputs"></div></div>
+<div class="ma"><button type="button" class="btn soft" onclick="closeM('txmodal')">Batal</button><button class="btn primary">Simpan Transaksi</button></div></form></div></div>
+<div class="modalbg" id="rulemodal"><div class="modal" style="max-width:550px"><div class="mh"><h2>Tambah Aturan Pajak</h2><button class="x" onclick="closeM('rulemodal')">×</button></div><form class="mb" id="ruleform"><div class="formgrid"><div class="field"><label>Jenis pajak</label><select id="rtype"><option>PPh 21</option><option>PPh 22</option><option>PPh 23</option><option>PPN</option></select></div><div class="field"><label>Nama aturan</label><input class="input" id="rname" required></div><div class="field"><label>Tarif (%)</label><input class="input" id="rrate" type="number" min="0" step=".0001" required></div><div class="field"><label>DPP (%)</label><input class="input" id="rdpp" type="number" min="0" max="100" value="100" required></div><div class="field"><label>Berlaku mulai</label><input class="input" id="rstart" type="date"></div><div class="field"><label>Berlaku sampai</label><input class="input" id="rend" type="date"></div></div><p style="font-size:11px;color:var(--muted)">Aturan harus diverifikasi terlebih dahulu oleh petugas berwenang.</p><div class="ma"><button type="button" class="btn soft" onclick="closeM('rulemodal')">Batal</button><button class="btn primary">Simpan</button></div></form></div></div>
+<script>
+const K='sia3_tx',A='sia3_audit',R='sia3_rules',C='sia3_checks',P='sia3_closed_periods';let closedPeriods=JSON.parse(localStorage.getItem(P)||'{}');let data=JSON.parse(localStorage.getItem(K)||'[]'),audit=JSON.parse(localStorage.getItem(A)||'[]'),rules=JSON.parse(localStorage.getItem(R)||'[]'),checks=JSON.parse(localStorage.getItem(C)||'["Identitas dan nomor dokumen diperiksa","Nama penerima sesuai dokumen","Tanggal dan periode sesuai","Kode sub kegiatan dan rekening sesuai","Nominal bruto dan komponen biaya diperiksa","Dokumen pendukung lengkap","Tanda tangan / persetujuan tersedia","Pajak diperiksa jika berlaku","Rekening penerima diverifikasi","Bukti transfer tersedia","Input SIPD diperiksa","Input pajak diperiksa jika berlaku"]');
+const $=x=>document.getElementById(x),v=x=>$(x).value,n=x=>Number(v(x)||0),m=x=>'Rp'+Number(x||0).toLocaleString('id-ID'),e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function save(){localStorage.setItem(K,JSON.stringify(data));localStorage.setItem(A,JSON.stringify(audit));localStorage.setItem(R,JSON.stringify(rules));localStorage.setItem(C,JSON.stringify(checks));render()}
+function log(a,r,d){audit.push({time:new Date().toLocaleString('id-ID'),action:a,ref:r,detail:d})}
+function go(p){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$('p-'+p).classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));$('crumb').textContent=({dashboard:'Dashboard',transactions:'Master Transaksi',payment:'Payment Control',tax:'Kalkulator Pajak',reconcile:'Rekonsiliasi',monthly:'Rekap Bulanan',export:'Export Excel',import:'Import Excel',settings:'Checklist & Aturan',audit:'Audit Trail'})[p]}
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>go(b.dataset.p));
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(z=>z.classList.remove('active'));document.querySelectorAll('.pane').forEach(z=>z.classList.remove('active'));b.classList.add('active');$('pane-'+b.dataset.tab).classList.add('active')});
+function closeM(id){$(id).style.display='none'}
+function openTx(id){if(id){let existing=data.find(z=>z.id===id);if(existing&&periodIsClosed(existing)){alert('Periode '+monthLabel(monthKey(existing))+' sudah ditutup. Buka kembali periode untuk mengedit.');return}}$('txform').reset();$('id').value='';$('modtitle').textContent=id?'Edit Transaksi':'Input Transaksi';$('date').value=new Date().toISOString().slice(0,10);$('month').value=new Date().toLocaleString('id-ID',{month:'long'});$('checkinputs').innerHTML=checks.map((c,i)=>`<label>${e(c)}<select id="ck${i}" class="input"><option>Belum</option><option>Lengkap</option><option>Tidak Lengkap</option><option>Tidak Berlaku</option></select></label>`).join('');document.querySelector('.tabs button[data-tab="a"]').click();
+if(id){let t=data.find(z=>z.id===id);$('id').value=id;let map={date:'date',month:'month',kind:'kind',trx:'trx',code:'code',subcode:'subcode',account:'account',docno:'docno',recipient:'recipient',bank:'bank',activity:'activity',description:'description',activityDate:'activityDate',period:'period',sipd:'sipd',honor:'honor',uh:'uh',transport:'transport',plane:'plane',hotel:'hotel',other:'other',procurement:'procurement',gross:'gross',p21:'p21',p22:'p22',p23:'p23',vat:'vat',taxcalc:'taxcalc',net:'net',verification:'verification',dupstatus:'dupstatus',transfer:'transfer',transferDate:'transferDate',actual:'actual',reference:'reference',sipdstatus:'sipdstatus',taxstatus:'taxstatus',checker1:'checker1',checker2:'checker2',notes:'notes'};Object.entries(map).forEach(([a,b])=>$(b).value=t[a]??'');(t.checks||[]).forEach((z,i)=>{if($('ck'+i))$('ck'+i).value=z})}
+$('txmodal').style.display='flex'}
+function getForm(){let o={};['date','month','kind','trx','code','subcode','account','docno','recipient','bank','activity','description','activityDate','period','sipd','verification','dupstatus','transfer','transferDate','reference','sipdstatus','taxstatus','checker1','checker2','notes'].forEach(k=>o[k]=v(k));['honor','uh','transport','plane','hotel','other','procurement','gross','p21','p22','p23','vat','taxcalc','net','actual'].forEach(k=>o[k]=n(k));o.checks=checks.map((_,i)=>v('ck'+i)||'Belum');return o}
+function taxes(t){return ['p21','p22','p23','vat'].reduce((a,k)=>a+Number(t[k]||0),0)}function netCalc(t){return Math.max(0,Number(t.gross||0)-taxes(t))}
+function matches(t,exclude){let norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');return data.filter(z=>z.id!==exclude&&((t.docno&&norm(z.docno)===norm(t.docno))||(t.recipient&&norm(z.recipient)===norm(t.recipient)&&t.activity&&norm(z.activity)===norm(t.activity)&&t.date===z.date)||(t.recipient&&norm(z.recipient)===norm(t.recipient)&&t.gross>0&&Number(z.gross)===Number(t.gross)&&t.account&&t.account===z.account)||(t.sipd&&norm(z.sipd)===norm(t.sipd))))}
+$('txform').onsubmit=ev=>{ev.preventDefault();let id=v('id'),old=data.find(z=>z.id===id),t=getForm();if(old&&periodIsClosed(old)){alert('Periode transaksi sudah ditutup. Buka kembali periode terlebih dahulu.');return}let targetKey=monthKey(t);if(closedPeriods[targetKey]){alert('Periode '+monthLabel(targetKey)+' sudah ditutup. Buka kembali atau pilih periode terbuka.');return}t.id=id||String(Date.now());t.reg=old?.reg||'SIA-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-6);t.created=old?.created||new Date().toISOString();let dup=matches(t,id);t.duplicateWarning=dup.map(z=>z.id);if(dup.length&&!confirm('PERINGATAN POTENSI DUPLIKAT:\\n'+dup.map(z=>z.reg+' — '+z.recipient).join('\\n')+'\\n\\nTetap simpan?'))return;if(old){data=data.map(z=>z.id===id?t:z);log('Perbarui transaksi',t.reg,'Data diperbarui')}else{data.push(t);log('Tambah transaksi',t.reg,'Input manual')}closeM('txmodal');save()};
+function state(t){if(t.transfer==='Sudah'&&t.sipdstatus==='Sudah'&&t.taxstatus!=='Belum')return'Selesai';if(t.transfer==='Sudah')return'Sudah Ditransfer';if(t.dupstatus==='Duplikat Terkonfirmasi')return'Duplikat Terkonfirmasi';if(t.verification!=='Lengkap')return'Belum Terverifikasi';if(t.transfer==='Disetujui')return'Siap Dibayar';return'Belum Dibayar'}
+function tag(s){let c=({'Selesai':'ok','Sudah Ditransfer':'ok','Siap Dibayar':'ok','Duplikat Terkonfirmasi':'bad','Belum Terverifikasi':'warn','Belum Dibayar':'warn','Cocok':'ok','Tidak Cocok':'bad'})[s]||'';return`<span class="tag ${c}">${e(s)}</span>`}
+function paymentIssues(t){let a=[];if(t.verification!=='Lengkap')a.push('Verifikasi belum lengkap');if(t.duplicateWarning?.length&&t.dupstatus==='Belum Ditinjau')a.push('Potensi duplikasi belum ditinjau');if(t.dupstatus==='Duplikat Terkonfirmasi')a.push('Duplikat terkonfirmasi');if(!t.recipient)a.push('Nama penerima kosong');if(!t.bank)a.push('Rekening belum diisi');if(Number(t.net)!==netCalc(t))a.push('Nilai bersih rencana tidak sama dengan bruto dikurangi pajak');if(t.checks?.some(z=>z==='Belum'||z==='Tidak Lengkap'))a.push('Checklist belum selesai');if(!t.checker1||!t.checker2||t.checker1===t.checker2)a.push('Dua pemeriksa berbeda belum dicatat');return a}
+
+const quickColumns=[
+  {key:'month',label:'Bulan',type:'text',w:105},
+  {key:'code',label:'KODE',type:'text',w:130,highlight:true},
+  {key:'subcode',label:'Kode Sub Kegiatan',type:'text',w:155},
+  {key:'account',label:'Kode Rekening',type:'text',w:155},
+  {key:'activity',label:'Aktivitas',type:'text',w:145},
+  {key:'trx',label:'Jenis Transaksi',type:'text',w:115},
+  {key:'transferDate',label:'Tanggal Transfer',type:'date',w:135},
+  {key:'description',label:'Uraian',type:'text',w:420},
+  {key:'destination',label:'Tujuan',type:'text',w:155},
+  {key:'activityDate',label:'Tgl (Uraian)',type:'text',w:135},
+  {key:'period',label:'Tgl (Periode)',type:'text',w:135},
+  {key:'recipient',label:'Nama',type:'text',w:190},
+  {key:'honor',label:'Honor',type:'money',w:125},
+  {key:'uh',label:'UH',type:'money',w:110},
+  {key:'transport',label:'Transportasi (BBM+Etoll)',type:'money',w:155},
+  {key:'plane',label:'Pesawat',type:'money',w:120},
+  {key:'hotel',label:'Penginapan',type:'money',w:130},
+  {key:'other',label:'Other',type:'money',w:115},
+  {key:'procurement',label:'Pengadaan',type:'money',w:130},
+  {key:'vat',label:'PPN',type:'money',w:115},
+  {key:'p22',label:'PPh 22',type:'money',w:115},
+  {key:'p23',label:'PPh 23',type:'money',w:115},
+  {key:'p21',label:'PPh 21',type:'money',w:115},
+  {key:'p21rate',label:'%PPh 21',type:'number',w:105},
+  {key:'gross',label:'Total',type:'money',w:135},
+  {key:'actual',label:'Realisasi',type:'money',w:135},
+  {key:'sipd',label:'Uraian SIPD',type:'text',w:300},
+  {key:'taxstatus',label:'Input Pajak',type:'text',w:130}
+];
+let quickDrafts=[];
+function newQuickDraft(){
+  return {month:new Date().toLocaleString('en-US',{month:'long'}),code:'',subcode:'',account:'',activity:'',trx:'',transferDate:'',description:'',destination:'',activityDate:'',period:'',recipient:'',honor:'',uh:'',transport:'',plane:'',hotel:'',other:'',procurement:'',vat:'0',p22:'0',p23:'0',p21:'0',p21rate:'',gross:'',actual:'',sipd:'',taxstatus:'Belum'};
+}
+function toggleQuickGrid(){
+  const box=$('quickGrid');
+  box.style.display=box.style.display==='none'?'block':'none';
+  if(box.style.display==='block'){
+    if(!quickDrafts.length)quickDrafts=[newQuickDraft()];
+    renderQuickGrid();
+  }
+}
+function addQuickRow(){quickDrafts.push(newQuickDraft());renderQuickGrid()}
+function removeQuickRow(i){quickDrafts.splice(i,1);if(!quickDrafts.length)quickDrafts.push(newQuickDraft());renderQuickGrid()}
+function setQuick(i,k,val){if(quickDrafts[i])quickDrafts[i][k]=val}
+function quickCellInput(d,i,c){
+  let val=d[c.key]??'';
+  let type=c.type==='money'?'text':(c.type==='number'?'number':(c.type==='date'?'date':'text'));
+  let cls=c.highlight?'q-code':'';
+  let placeholder=c.type==='money'?'0':(c.key==='description'?'Ketik uraian lengkap...':'');
+  return `<input class="${cls}" data-row="${i}" data-col="${c.key}" aria-label="${e(c.label)} baris ${i+1}" type="${type}" ${c.type==='number'?'step="0.01"':''} ${c.type==='money'?'inputmode="numeric"':''} placeholder="${placeholder}" value="${e(val)}" oninput="setQuick(${i},'${c.key}',this.value)" onkeydown="quickGridKey(event,this)">`;
+}
+function renderQuickGrid(){
+  const box=$('quickGrid');if(!box)return;
+  let savedHint='Urutan kolom mengikuti file Excel kantor. Sel kuning adalah kolom KODE. Geser ke kanan untuk melihat kolom berikutnya.';
+  box.innerHTML=`<div class="qhead"><div><b>Input Data – Format Excel Kantor</b><div class="muted" style="font-size:11px;margin-top:3px">${savedHint}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn soft" onclick="addQuickRow()">＋ Tambah Baris</button><button class="btn soft" onclick="toggleQuickGrid()">Tutup Tabel</button></div></div>
+  <div class="qscroll"><table class="qsheet"><colgroup><col style="width:48px">${quickColumns.map(c=>`<col style="width:${c.w}px">`).join('')}<col style="width:120px"></colgroup>
+  <thead><tr><th>No</th>${quickColumns.map(c=>`<th class="${c.highlight?'q-code-head':''}">${e(c.label)}</th>`).join('')}<th>Aksi</th></tr></thead>
+  <tbody>${quickDrafts.map((d,i)=>`<tr><td class="q-no">${i+1}</td>${quickColumns.map(c=>`<td class="${c.highlight?'q-code-cell':''}">${quickCellInput(d,i,c)}</td>`).join('')}<td class="q-actions"><button class="btn primary" onclick="saveQuickRow(${i})">Simpan</button><button class="btn danger" onclick="removeQuickRow(${i})">×</button></td></tr>`).join('')}</tbody></table></div>
+  <div class="qhint">Cara pakai: klik sel lalu ketik. Tekan Tab untuk berpindah ke kanan, Enter untuk turun ke sel pada kolom yang sama. Untuk uraian panjang, lebarkan kolom dengan menggeser tabel. Nilai uang diisi angka tanpa mengetik Rp.</div>`;
+}
+function quickGridKey(ev,el){
+  if(ev.key!=='Enter')return;
+  ev.preventDefault();
+  const row=Number(el.dataset.row),col=el.dataset.col;
+  const next=document.querySelector(`.qsheet input[data-row="${row+1}"][data-col="${col}"]`);
+  if(next)next.focus();else if(row===quickDrafts.length-1){addQuickRow();setTimeout(()=>document.querySelector(`.qsheet input[data-row="${row+1}"][data-col="${col}"]`)?.focus(),0)}
+}
+function saveQuickRow(i){
+  const d=quickDrafts[i];if(!d)return;
+  if(!d.month.trim()||!d.code.trim()||!d.activity.trim()||!d.recipient.trim()){
+    alert('Lengkapi minimal Bulan, KODE, Aktivitas, dan Nama terlebih dahulu.');return;
+  }
+  const amountKeys=['honor','uh','transport','plane','hotel','other','procurement','vat','p22','p23','p21','gross','actual'];
+  const t={id:String(Date.now())+'-'+i,reg:'SIA-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-6),
+    created:new Date().toISOString(),date:d.transferDate||'',month:d.month,code:d.code,subcode:d.subcode,account:d.account,
+    activity:d.activity,trx:d.trx,kind:['Pengadaan','Perjalanan Dinas','Honorarium'].includes(d.trx)?d.trx:'Lainnya',
+    transferDate:d.transferDate,description:d.description,destination:d.destination,activityDate:d.activityDate,period:d.period,
+    recipient:d.recipient,sipd:d.sipd,taxstatus:d.taxstatus,p21rate:Number(d.p21rate)||0,
+    honor:0,uh:0,transport:0,plane:0,hotel:0,other:0,procurement:0,vat:0,p22:0,p23:0,p21:0,gross:0,actual:0,
+    taxcalc:0,net:0,transfer:Number(d.actual)>0?'Sudah':'Belum',verification:'Belum Diperiksa',
+    dupstatus:'Belum Ditinjau',sipdstatus:'Belum',reference:'',bank:'',docno:'',checks:checks.map(()=> 'Belum'),
+    notes:'Input melalui tabel Excel'};
+  amountKeys.forEach(k=>t[k]=Number(String(d[k]??'').replace(/[^\d.-]/g,''))||0);
+  t.net=t.gross-['p21','p22','p23','vat'].reduce((a,k)=>a+t[k],0);
+  const dup=matches(t,null);t.duplicateWarning=dup.map(z=>z.id);
+  if(dup.length&&!confirm('PERINGATAN: Ada data yang mungkin duplikat. Tetap simpan baris ini?'))return;
+  data.push(t);log('Tambah transaksi melalui tabel Excel',t.reg,'Input sesuai kolom Excel kantor');save();
+  quickDrafts.splice(i,1);if(!quickDrafts.length)quickDrafts.push(newQuickDraft());renderQuickGrid();
+}
+function render(){let count=f=>data.filter(f).length;$('c0').textContent=data.length;$('c1').textContent=count(t=>t.verification!=='Lengkap');$('c2').textContent=count(t=>t.duplicateWarning?.length>0);$('c3').textContent=count(t=>t.transfer!=='Sudah');$('c4').textContent=count(t=>state(t)==='Selesai');
+let stages=[['Diverifikasi',count(t=>t.verification==='Lengkap')],['Disetujui / ditransfer',count(t=>['Disetujui','Sudah'].includes(t.transfer))],['Sudah transfer',count(t=>t.transfer==='Sudah')],['Input SIPD',count(t=>t.sipdstatus==='Sudah')],['Selesai',count(t=>state(t)==='Selesai')]];$('summary').innerHTML=stages.map(([s,c])=>`<p style="font-size:12px">${s}: <b>${c}</b> / ${data.length}</p>`).join('')||'Belum ada data';let al=data.filter(t=>t.duplicateWarning?.length||t.verification!=='Lengkap'||(t.transfer==='Sudah'&&t.actual!==netCalc(t)));$('alerts').innerHTML=al.slice(0,6).map(t=>`<p style="font-size:11px"><b>${e(t.reg)}</b> ${e(t.recipient)}<span class="muted">${t.duplicateWarning?.length?'Potensi duplikat · ':''}${state(t)}</span></p>`).join('')||'<div class="empty">Tidak ada peringatan.</div>';
+$('recent').innerHTML=data.slice().reverse().slice(0,6).map(t=>`<tr><td>${e(t.reg)}</td><td>${e(t.recipient)}<span class="muted">${e(t.activity)}</span></td><td>${m(t.gross)}</td><td>${m(t.actual)}</td><td>${tag(state(t))}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">Belum ada transaksi.</td></tr>';
+let q=(v('search')||'').toLowerCase(),f=v('filter'),tm=v('transactionMonth');let list=data.filter(t=>(!f||t.kind===f)&&(!tm||monthKey(t)===tm)&&(!q||[t.reg,t.recipient,t.activity,t.account,t.docno,t.sipd].join(' ').toLowerCase().includes(q)));let tmCurrent=v('transactionMonth'), monthOptions=[...new Set(data.map(t=>monthKey(t)))].sort().reverse();$('transactionMonth').innerHTML='<option value="">Semua bulan</option>'+monthOptions.map(k=>`<option value="${e(k)}">${e(monthLabel(k))}</option>`).join('');$('transactionMonth').value=tmCurrent;
+ $('rows').innerHTML=list.map(t=>`<tr><td><b>${e(t.reg)}</b><span class="muted">${e(t.docno)}</span></td><td>${e(t.date)}</td><td>${e(t.kind)}<span class="muted">${e(t.activity)}</span></td><td>${e(t.recipient)}</td><td>${m(t.gross)}</td><td>${m(t.actual)}</td><td>${tag(state(t))}${t.duplicateWarning?.length?'<span class="muted" style="color:#b93838">⚠ Potensi duplikat</span>':''}</td><td><button class="btn soft" onclick="openTx('${t.id}')">Edit</button> <button class="btn danger" onclick="delTx('${t.id}')">Hapus</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Tidak ada data.</td></tr>';
+$('payrows').innerHTML=data.map(t=>{let is=paymentIssues(t);return`<tr><td>${e(t.reg)}<span class="muted">${e(t.recipient)}</span></td><td>${m(t.gross)}</td><td>${m(taxes(t))}</td><td>${m(t.net)}</td><td>${is.length?tag(is.length+' pemeriksaan') :tag('Siap Dibayar')}<span class="muted">${e(is.join('; '))}</span></td><td>${tag(t.transfer)}</td><td><button class="btn soft" onclick="paymentDetail('${t.id}')">Periksa</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Belum ada transaksi.</td></tr>';
+$('recon').innerHTML=data.map(t=>{let diff=Number(t.actual)-netCalc(t),ok=t.transfer==='Sudah'&&diff===0;return`<tr><td>${e(t.reg)}<span class="muted">${e(t.recipient)}</span></td><td>${m(t.gross)}</td><td>${m(taxes(t))}</td><td>${m(netCalc(t))}</td><td>${m(t.actual)}</td><td>${m(diff)}</td><td>${tag(ok?'Cocok':t.transfer==='Sudah'?'Tidak Cocok':'Menunggu Transfer')}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Belum ada transaksi.</td></tr>';
+$('checks').innerHTML=checks.map((c,i)=>`<div style="display:flex;justify-content:space-between;padding:9px;border-bottom:1px solid var(--line);font-size:12px">${i+1}. ${e(c)} <button class="btn danger" onclick="removeCheck(${i})">Hapus</button></div>`).join('');$('auditrows').innerHTML=audit.slice().reverse().map(a=>`<tr><td>${e(a.time)}</td><td>${e(a.action)}</td><td>${e(a.ref)}</td><td>${e(a.detail)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Belum ada aktivitas.</td></tr>';renderRules();renderMonthly()}
+function delTx(id){let t=data.find(z=>z.id===id);if(t&&periodIsClosed(t)){alert('Periode sudah ditutup. Buka kembali periode untuk menghapus transaksi.');return}if(confirm('Hapus dari penyimpanan lokal? Untuk audit, lebih baik koreksi daripada menghapus transaksi.')){data=data.filter(z=>z.id!==id);log('Hapus transaksi',t.reg,'Dihapus dari data lokal');save()}}
+function paymentDetail(id){let t=data.find(z=>z.id===id),issues=paymentIssues(t);alert('Pemeriksaan '+t.reg+'\\n'+(issues.length?issues.join('\\n'):'Validasi internal lulus')+'\\n\\nRencana bersih: '+m(t.net)+'\\nTransfer aktual: '+m(t.actual));if(confirm('Buka transaksi untuk memperbarui data atau mencatat transfer?'))openTx(id)}
+function openRule(){$('ruleform').reset();$('rulemodal').style.display='flex'}
+$('ruleform').onsubmit=ev=>{ev.preventDefault();rules.push({id:String(Date.now()),type:v('rtype'),name:v('rname'),rate:n('rrate'),dpp:n('rdpp'),start:v('rstart'),end:v('rend')});log('Tambah aturan pajak',v('rtype'),v('rname'));closeM('rulemodal');save()}
+
+function monthKey(t){
+  let d=String(t.date||'');
+  if(/^\d{4}-\d{2}/.test(d)) return d.slice(0,7);
+  let raw=String(t.month||'').trim();
+  if(!raw) return 'Tanggal tidak diketahui';
+  return raw;
+}
+function periodIsClosed(t){return !!closedPeriods[monthKey(t)]}
+function selectedPeriod(){return v('monthPeriod')||''}
+function monthLabel(key){
+  if(/^\d{4}-\d{2}$/.test(key)){
+    let [y,mm]=key.split('-').map(Number);
+    return new Date(y,mm-1,1).toLocaleString('id-ID',{month:'long',year:'numeric'});
+  }
+  return key;
+}
+function monthlyGroups(){
+  let year=v('monthYear'), period=v('monthPeriod'), kind=v('monthKind');
+  let list=data.filter(t=>(!kind||t.kind===kind)&&(!year||monthKey(t).startsWith(year))&&(!period||monthKey(t)===period));
+  let groups={};
+  list.forEach(t=>{
+    let k=monthKey(t);
+    if(!groups[k]) groups[k]={key:k,items:[],gross:0,p21:0,p22:0,p23:0,vat:0,net:0,actual:0};
+    let g=groups[k];g.items.push(t);
+    ['gross','p21','p22','p23','vat','net','actual'].forEach(x=>g[x]+=Number(t[x]||0));
+  });
+  return Object.values(groups).sort((a,b)=>b.key.localeCompare(a.key));
+}
+function renderMonthly(){
+  if(!$('monthYear')) return;
+  let current=v('monthYear'), currentPeriod=v('monthPeriod'), years=[...new Set(data.map(t=>monthKey(t).slice(0,4)).filter(x=>/^\d{4}$/.test(x)))].sort().reverse();
+  $('monthYear').innerHTML='<option value="">Semua tahun</option>'+years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  $('monthYear').value=current;
+  let periods=[...new Set(data.map(t=>monthKey(t)))].sort().reverse();
+  $('monthPeriod').innerHTML='<option value="">Semua bulan</option>'+periods.map(k=>`<option value="${e(k)}">${e(monthLabel(k))}</option>`).join('');
+  $('monthPeriod').value=currentPeriod;
+  let pkey=v('monthPeriod'), closed=!!closedPeriods[pkey];
+  $('periodStatus').textContent=!pkey?'Status periode: pilih satu bulan':('Status '+monthLabel(pkey)+': '+(closed?'DITUTUP':'TERBUKA'));
+  $('periodStatus').style.color=closed?'var(--red)':'var(--green)';
+  $('periodToggle').disabled=!pkey;
+  $('periodToggle').textContent=closed?'Buka Kembali Bulan':'Tutup Bulan';
+  $('periodToggle').className='btn '+(closed?'soft':'danger');
+  let groups=monthlyGroups(), totals={gross:0,p21:0,p22:0,p23:0,vat:0,net:0,actual:0,count:0};
+  groups.forEach(g=>{Object.keys(totals).forEach(k=>{if(k==='count')totals[k]+=g.items.length;else totals[k]+=g[k]||0})});
+  $('mGross').textContent=m(totals.gross);$('mP21').textContent=m(totals.p21);$('mP22').textContent=m(totals.p22);$('mP23').textContent=m(totals.p23);$('mVat').textContent=m(totals.vat);
+  $('mTax').textContent=m(totals.p21+totals.p22+totals.p23+totals.vat);$('mNet').textContent=m(totals.net);$('mActual').textContent=m(totals.actual);
+  $('monthlyRows').innerHTML=groups.map(g=>`<tr><td><b>${e(monthLabel(g.key))}</b></td><td>${g.items.length}</td><td>${m(g.gross)}</td><td>${m(g.p21)}</td><td>${m(g.p22)}</td><td>${m(g.p23)}</td><td>${m(g.vat)}</td><td>${m(g.p21+g.p22+g.p23+g.vat)}</td><td>${m(g.net)}</td><td>${m(g.actual)}</td></tr>`).join('')||'<tr><td colspan="10" class="empty">Belum ada transaksi untuk filter ini.</td></tr>';
+  $('monthlyFoot').innerHTML=groups.length?`<tr style="font-weight:800;background:#f8fafc"><td>TOTAL</td><td>${totals.count}</td><td>${m(totals.gross)}</td><td>${m(totals.p21)}</td><td>${m(totals.p22)}</td><td>${m(totals.p23)}</td><td>${m(totals.vat)}</td><td>${m(totals.p21+totals.p22+totals.p23+totals.vat)}</td><td>${m(totals.net)}</td><td>${m(totals.actual)}</td></tr>`:'';
+  $('monthlyDetail').innerHTML=groups.flatMap(g=>g.items.map(t=>`<tr><td>${e(t.reg)}</td><td>${e(t.date)}</td><td>${e(t.kind)}</td><td>${e(t.recipient)}<span class="muted">${e(t.activity)}</span></td><td>${m(t.gross)}</td><td>${m(t.p21)}</td><td>${m(t.p22)}</td><td>${m(t.p23)}</td><td>${m(t.vat)}</td><td>${m(t.actual)}</td></tr>`)).join('')||'<tr><td colspan="10" class="empty">Tidak ada rincian transaksi.</td></tr>';
+}
+function togglePeriod(){
+ const key=selectedPeriod();if(!key){alert('Pilih satu bulan tertentu terlebih dahulu.');return}
+ if(closedPeriods[key]){
+   if(!confirm('Buka kembali periode '+monthLabel(key)+'? Transaksi pada bulan ini dapat ditambah, diedit, dan dihapus lagi.'))return;
+   delete closedPeriods[key];log('Buka kembali periode',key,'Periode dibuka kembali untuk koreksi');
+ }else{
+   if(!confirm('Tutup periode '+monthLabel(key)+'? Transaksi pada bulan ini akan dikunci dari tambah, edit, dan hapus. Rekap tetap dapat dilihat dan diekspor.'))return;
+   closedPeriods[key]=true;log('Tutup periode',key,'Periode dikunci');
+ }
+ localStorage.setItem(P,JSON.stringify(closedPeriods));save();
+}
+function applyRupiahFormat(ws, columnIndexes, rowCount){
+  const fmt='"Rp." #,##0;[Red]("Rp." #,##0);-';
+  columnIndexes.forEach(col=>{
+    for(let row=1;row<rowCount;row++){
+      const addr=XLSX.utils.encode_cell({r:row,c:col});
+      if(ws[addr] && typeof ws[addr].v==='number') ws[addr].z=fmt;
+    }
+  });
+}
+function exportTransactionsXlsx(){
+  if(!window.XLSX)return alert('Library Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.');
+  const keys=['reg','date','month','kind','trx','code','subcode','account','docno','activity','description','recipient','bank','honor','uh','transport','plane','hotel','other','procurement','gross','p21','p22','p23','vat','taxcalc','net','actual','transferDate','reference','verification','dupstatus','transfer','sipdstatus','taxstatus','sipd','notes'];
+  const labels=['Registrasi','Tanggal','Bulan','Jenis Berkas','Jenis Transaksi','Kode','Kode Sub Kegiatan','Kode Rekening','Nomor Dokumen','Aktivitas','Uraian','Nama/Tujuan','Bank','Honor','Uang Harian','Transportasi','Pesawat','Penginapan','Lainnya','Pengadaan','Total Bruto','PPh 21','PPh 22','PPh 23','PPN','Pajak Hasil Kalkulasi','Realisasi Bersih Rencana','Transfer Aktual','Tanggal Transfer','Referensi Transfer','Verifikasi','Status Duplikat','Status Transfer','Status SIPD','Status Pajak','Uraian SIPD','Catatan'];
+  const rows=data.map(t=>keys.map(k=>t[k]??''));
+  const ws=XLSX.utils.aoa_to_sheet([labels,...rows]);
+  ws['!cols']=labels.map(x=>({wch:Math.min(Math.max(x.length+3,14),28)}));
+  applyRupiahFormat(ws,Array.from({length:15},(_,i)=>i+13),rows.length+1);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Transaksi');
+  XLSX.writeFile(wb,'SIA-transaksi.xlsx');
+}
+function exportWorkbook(){
+  if(!window.XLSX)return alert('Library Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.');
+  const wb=XLSX.utils.book_new();
+  const keys=['reg','date','month','kind','trx','code','subcode','account','docno','activity','description','recipient','bank','honor','uh','transport','plane','hotel','other','procurement','gross','p21','p22','p23','vat','taxcalc','net','actual','transferDate','reference','verification','dupstatus','transfer','sipdstatus','taxstatus','sipd','notes'];
+  const labels=['Registrasi','Tanggal','Bulan','Jenis Berkas','Jenis Transaksi','Kode','Kode Sub Kegiatan','Kode Rekening','Nomor Dokumen','Aktivitas','Uraian','Nama/Tujuan','Bank','Honor','Uang Harian','Transportasi','Pesawat','Penginapan','Lainnya','Pengadaan','Total Bruto','PPh 21','PPh 22','PPh 23','PPN','Pajak Hasil Kalkulasi','Realisasi Bersih Rencana','Transfer Aktual','Tanggal Transfer','Referensi Transfer','Verifikasi','Status Duplikat','Status Transfer','Status SIPD','Status Pajak','Uraian SIPD','Catatan'];
+  let ws=XLSX.utils.aoa_to_sheet([labels,...data.map(t=>keys.map(k=>t[k]??''))]);
+  ws['!cols']=labels.map(x=>({wch:Math.min(Math.max(x.length+3,14),28)}));
+  applyRupiahFormat(ws,Array.from({length:15},(_,i)=>i+13),data.length+1);
+  XLSX.utils.book_append_sheet(wb,ws,'Transaksi');
+
+  const groups=monthlyGroups();
+  const monthlyHeaders=['Bulan','Jumlah Transaksi','Total Bruto','PPh 21','PPh 22','PPh 23','PPN','Total Pajak','Realisasi Bersih Rencana','Transfer Aktual'];
+  ws=XLSX.utils.aoa_to_sheet([monthlyHeaders,...groups.map(g=>[monthLabel(g.key),g.items.length,g.gross,g.p21,g.p22,g.p23,g.vat,g.p21+g.p22+g.p23+g.vat,g.net,g.actual])]);
+  applyRupiahFormat(ws,[2,3,4,5,6,7,8,9],groups.length+1);
+  XLSX.utils.book_append_sheet(wb,ws,'Rekap Bulanan');
+
+  const detailHeaders=['Registrasi','Tanggal','Jenis Berkas','Nama/Tujuan','Aktivitas','Bruto','PPh 21','PPh 22','PPh 23','PPN','Transfer Aktual'];
+  const details=groups.flatMap(g=>g.items.map(t=>[t.reg,t.date,t.kind,t.recipient,t.activity,t.gross,t.p21,t.p22,t.p23,t.vat,t.actual]));
+  ws=XLSX.utils.aoa_to_sheet([detailHeaders,...details]);
+  applyRupiahFormat(ws,[5,6,7,8,9,10],details.length+1);
+  XLSX.utils.book_append_sheet(wb,ws,'Rincian Bulanan');
+
+  ws=XLSX.utils.aoa_to_sheet([['Waktu','Aktivitas','Referensi','Detail'],...audit.map(a=>[a.time,a.action,a.ref,a.detail])]);
+  XLSX.utils.book_append_sheet(wb,ws,'Audit Trail');
+  XLSX.writeFile(wb,'SIA-backup-lengkap.xlsx');
+}
+function exportMonthly(){
+  let groups=monthlyGroups();
+  let headers=['Bulan','Jumlah Transaksi','Total Bruto','PPh 21','PPh 22','PPh 23','PPN','Total Pajak','Realisasi Bersih Rencana','Transfer Aktual'];
+  let rows=groups.map(g=>[monthLabel(g.key),g.items.length,g.gross,g.p21,g.p22,g.p23,g.vat,g.p21+g.p22+g.p23+g.vat,g.net,g.actual]);
+  csv(headers,rows,'sia-rekap-bulanan.csv');
+}
+
+function renderRules(){let type=v('taxType')||'PPh 21',rs=rules.filter(r=>r.type===type);$('taxRule').innerHTML=rs.map(r=>`<option value="${r.id}">${e(r.name)} — ${r.rate}% × DPP ${r.dpp}%</option>`).join('')||'<option value="">Belum ada aturan</option>';$('rules').innerHTML=rules.map(r=>`<tr><td>${e(r.type)}</td><td>${e(r.name)}</td><td>${r.rate}%</td><td>${r.dpp}%</td><td>${e(r.start||'-')} s.d. ${e(r.end||'-')}</td><td><button class="btn danger" onclick="delRule('${r.id}')">Hapus</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Belum ada aturan pajak.</td></tr>';calc()}
+function calc(){let rule=rules.find(r=>r.id===v('taxRule')),res=rule?n('base')*rule.dpp/100*rule.rate/100:0,diff=res-n('physical');$('result').textContent=m(res);$('difference').textContent=m(diff);$('match').textContent=rule?(diff===0?'Sama dengan dokumen':'Berbeda — periksa dokumen'):'Tambahkan aturan yang sudah diverifikasi';}
+function delRule(id){if(confirm('Hapus aturan pajak?')){rules=rules.filter(r=>r.id!==id);log('Hapus aturan pajak',id,'Aturan dihapus');save()}}
+function addCheck(){let x=prompt('Nama item checklist:');if(x?.trim()){checks.push(x.trim());log('Tambah checklist','Umum',x);save()}}
+function removeCheck(i){if(confirm('Hapus item checklist?')){checks.splice(i,1);log('Hapus checklist','Umum','Item '+(i+1));save()}}
+function csv(headers,rows,name){let s=[headers,...rows].map(r=>r.map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(';')).join('\r\n'),b=new Blob(['\ufeff'+s],{type:'text/csv;charset=utf-8'}),a=document.createElement('a'),u=URL.createObjectURL(b);a.href=u;a.download=name;a.click();URL.revokeObjectURL(u)}
+function exportData(){let keys=['reg','date','month','kind','trx','code','subcode','account','docno','activity','description','recipient','bank','honor','uh','transport','plane','hotel','other','procurement','gross','p21','p22','p23','vat','taxcalc','net','actual','transferDate','reference','verification','transfer','sipdstatus','taxstatus','sipd','notes'];csv(keys,data.map(t=>keys.map(k=>t[k]??'')),'sia-transaksi.csv')}
+function exportAudit(){csv(['Waktu','Aktivitas','Referensi','Detail'],audit.map(a=>[a.time,a.action,a.ref,a.detail]),'sia-audit.csv')}
+function template(){csv(['Bulan','KODE','Kode Sub Kegiatan','Kode Rekening','Aktivitas','Jenis Transaksi','Tanggal Transfer','Uraian','Tujuan','Tgl (Uraian)','Tgl (Periode)','Nama','Honor','UH','Transportasi (BBM+Etoll)','Pesawat','Penginapann','Other','Pengadaan','PPN','PPh 22','PPh 23','PPh 21','%PPh 21','Total','Realisasi','Uraian SIPD','Input Pajak'],[],'template-sia.csv')}
+let imported=[];
+function numExcel(x){if(typeof x==='number')return x;let s=String(x??'').replace(/[^\d,.-]/g,'');if(s.includes('.')&&s.includes(','))s=s.replace(/\./g,'').replace(',','.');else if(/^\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');else s=s.replace(',','.');return Number(s)||0}
+function readExcel(){let file=$('file').files[0];if(!file)return alert('Pilih file terlebih dahulu.');if(!window.XLSX)return alert('Library Excel belum termuat. Periksa internet dan muat ulang.');let rd=new FileReader();rd.onload=ev=>{try{let wb=XLSX.read(ev.target.result,{type:'array',cellDates:true}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}),pick=(r,names)=>{let k=Object.keys(r).find(k=>names.some(n=>k.toLowerCase().replace(/[^a-z0-9]/g,'')===n.toLowerCase().replace(/[^a-z0-9]/g,'')));return k?r[k]:''};imported=rows.map((r,i)=>{let date=pick(r,['Tanggal','Tanggal Transfer']);if(date instanceof Date)date=date.toISOString().slice(0,10);let g=numExcel(pick(r,['Total'])),real=numExcel(pick(r,['Realisasi']));return{id:'imp'+Date.now()+i,reg:'SIA-IMP-'+(i+1)+'-'+String(Date.now()).slice(-4),date:String(date||''),month:String(pick(r,['Bulan'])),kind:'Lainnya',trx:String(pick(r,['Jenis Transaksi'])),code:String(pick(r,['KODE'])),subcode:String(pick(r,['Kode Sub Kegiatan'])),account:String(pick(r,['Kode Rekening'])),docno:'',recipient:String(pick(r,['Nama','Tujuan'])),bank:'',activity:String(pick(r,['Aktivitas'])),description:String(pick(r,['Uraian'])),activityDate:'',period:String(pick(r,['Tgl (Periode)'])),sipd:String(pick(r,['Uraian SIPD'])),honor:numExcel(pick(r,['Honor'])),uh:numExcel(pick(r,['UH'])),transport:numExcel(pick(r,['Transportasi (BBM+Etoll)','Transportasi'])),plane:numExcel(pick(r,['Pesawat'])),hotel:numExcel(pick(r,['Penginapann','Penginapan'])),other:numExcel(pick(r,['Other'])),procurement:numExcel(pick(r,['Pengadaan'])),gross:g,p21:numExcel(pick(r,['PPh 21'])),p22:numExcel(pick(r,['PPh 22'])),p23:numExcel(pick(r,['PPh 23'])),vat:numExcel(pick(r,['PPN'])),taxcalc:0,net:real,actual:real,verification:'Belum Diperiksa',dupstatus:'Belum Ditinjau',transfer:real?'Sudah':'Belum',transferDate:'',reference:'',sipdstatus:'Belum',taxstatus:'Belum',checker1:'',checker2:'',notes:'Diimpor dari Excel; wajib diverifikasi.',checks:checks.map(()=> 'Belum'),duplicateWarning:[]}});let dup=imported.filter(t=>matches(t).length).length;$('preview').innerHTML=`<div class="notice">${rows.length} baris terbaca. ${dup} baris berpotensi duplikat dengan data yang sudah ada. Pratinjau maksimal 25 baris.</div><div class="tablewrap"><table><thead><tr><th>NAMA</th><th>AKTIVITAS</th><th>BRUTO</th><th>REALISASI</th><th>PERINGATAN</th></tr></thead><tbody>${imported.slice(0,25).map(t=>`<tr><td>${e(t.recipient)}</td><td>${e(t.activity)}</td><td>${m(t.gross)}</td><td>${m(t.net)}</td><td>${matches(t).length?tag('Potensi Duplikat'):tag('Tidak ditemukan')}</td></tr>`).join('')}</tbody></table></div><button class="btn primary" style="margin-top:12px" onclick="confirmImport()">Konfirmasi Import ${rows.length} baris</button>`}catch(err){$('preview').textContent='Gagal membaca file: '+err.message}};rd.readAsArrayBuffer(file)}
+function confirmImport(){if(!imported.length)return;imported.forEach(t=>{t.duplicateWarning=matches(t).map(z=>z.id);data.push(t)});log('Import Excel','Batch',imported.length+' transaksi ditambahkan; potensi duplikat diberi peringatan');let nrows=imported.length;imported=[];$('preview').innerHTML=`<span class="tag ok">Import selesai</span> ${nrows} transaksi ditambahkan. Verifikasi ulang semua data impor.`;save()}
+render();renderRules();
+</script></body></html>
